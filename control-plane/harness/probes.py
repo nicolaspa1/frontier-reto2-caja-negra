@@ -1,31 +1,19 @@
 #!/usr/bin/env python3
-"""Laboratory PROBE runner (Challenge 2).
+"""Laboratory probe runner: harness/sondas.json against a --target (never the original).
 
-Runs the probes from harness/sondas.json against a --target (local emulator;
-NEVER the original). For each probe it does POST /__reset and sends its
-`mensajes` in order. Supported message formats:
-
-  - string                      -> POST /msg {"m": <string>}  (control already included)
-  - {"m": ..., "token": ...}    -> POST /msg {"m": ...} with Authorization Bearer <token>
+Per probe: POST /__reset, then its `mensajes` in order. Message formats:
+  - string                      -> POST /msg {"m": <string>}  (control included)
+  - {"m": ..., "token": ...}    -> POST /msg with Authorization Bearer <token>
   - {"raw": true, "method","path","auth","body"?,"headers"?,"bytes"?}
-        raw request. auth=true adds Authorization Bearer <token>; extra headers
-        are merged; "<token>" inside a header is replaced by the real token;
+        auth=true adds the team token; "<token>" inside a header is replaced by it;
         a string body is sent as-is, an object body is serialized to JSON.
 
-The FIRST run against a target stores a baseline (lab/probes_baseline_<label>.jsonl).
-On later runs it compares status+body (evaluator rule, compare.py) against the
-baseline and prints the probes whose result changed, with their
-`señal_de_cambio`.
-
-Also (additive, in line with the monitor):
-  - Latency (#2): measures ms per request (perf_counter), reports p50/p99/max,
-    the number of responses > 5000 ms and of 5xx, and writes ONE line per run to
-    harness/metrics.jsonl (ts, target, steps, equal, p50, p99, max, n_slow,
-    n_5xx, requests_spent, alerts).
-  - Infra vs service (#4): a response with an X-Frontier-Infra header, status
-    502/503/504 or a body containing "Application not found" is classified INFRA
-    (not counted as a change; counted separately and retried after --infra-wait
-    seconds). x-req = service.
+The first run against a target stores lab/probes_baseline_<label>.jsonl; later
+runs compare status+body (compare.py) and print the probes whose result changed
+with their `señal_de_cambio`. Latency (p50/p99/max, >5000 ms, 5xx) goes to
+harness/metrics.jsonl, one line per run. INFRA responses (X-Frontier-Infra,
+502/503/504, "Application not found") are counted apart and retried once after
+--infra-wait seconds.
 
 CLI:
   python3 probes.py --target http://localhost:8091 --token lab            # ronda_larga
@@ -65,11 +53,7 @@ def is_infra(status, headers, body):
 
 
 def write_metric(target, steps, equal, http, alerts):
-    """ONE line per run in harness/metrics.jsonl (same format as the monitor).
-
-    The JSON keys are kept in Spanish on purpose: metrics.jsonl must stay
-    byte-compatible with the monitor's output.
-    """
+    """One line per run in harness/metrics.jsonl; keys are frozen (same format as the monitor)."""
     p50, p99, mx = http.pcts()
     rec = {
         "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -119,7 +103,6 @@ class Http:
         self.client = httpx.Client(base_url=self.base, timeout=15.0)
         self.n = 0
         self.infra_wait = infra_wait
-        # per-run metrics (#2/#4)
         self.times = []
         self.n_5xx = 0
         self.n_slow = 0
@@ -137,9 +120,8 @@ class Http:
             ms = (perf_counter() - t0) * 1000.0
             status, body, hdrs = resp.status_code, resp.text, dict(resp.headers)
         except Exception as e:
-            # A deliberately malformed probe (e.g. a lying Content-Length that
-            # the HTTP client refuses to send) must not bring down the run: a
-            # deterministic, comparable result is recorded instead.
+            # A probe the HTTP client refuses to send (e.g. a lying Content-Length) must not
+            # bring down the run: record a deterministic, comparable result instead.
             ms = (perf_counter() - t0) * 1000.0
             status, body, hdrs = None, f"<client-error: {type(e).__name__}>", {}
         self.times.append(ms)
@@ -151,8 +133,7 @@ class Http:
         if self.last_infra:
             self.n_infra += 1
             if self.infra_wait > 0 and _retry:
-                # infra response: wait and retry ONCE (no infinite recursion
-                # if the infra stays down).
+                # infra response: wait and retry once
                 time.sleep(self.infra_wait)
                 return self._send(method, path, headers, content, _retry=False)
         return status, body
@@ -174,15 +155,12 @@ class Http:
 
     def step(self, m):
         """Run one message (string or dict) and return (status, body)."""
-        # string -> POST /msg with the team token
         if isinstance(m, str):
             h = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
             return self._send("POST", "/msg", h, json.dumps({"m": m}).encode())
-        # {"m":..., "token":...} -> /msg with an alternative token
         if "token" in m and "raw" not in m:
             h = {"Authorization": f"Bearer {m['token']}", "Content-Type": "application/json"}
             return self._send("POST", "/msg", h, json.dumps({"m": m["m"]}).encode())
-        # raw
         method = m.get("method", "POST")
         path = m.get("path", "/msg")
         headers = {}
@@ -200,8 +178,7 @@ class Http:
             else:
                 content = json.dumps(body).encode()
             headers.setdefault("Content-Type", "application/json")
-        # extra headers (replaces "<token>" with the real token). A manual
-        # Content-Length is skipped: the client computes it from the real body.
+        # a manual Content-Length is skipped: the client computes it from the real body
         for k, v in (m.get("headers") or {}).items():
             if k.lower() == "content-length":
                 continue

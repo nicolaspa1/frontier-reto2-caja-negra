@@ -1,21 +1,11 @@
 #!/usr/bin/env bash
-# =============================================================================
-# LOCAL TEST LABORATORY - Challenge 2 "The black box"
-#
-# Validates the detection -> localization -> adaptation cycle WITHOUT touching the
-# original service (caja-negra-production is forbidden). It launches local
-# emulators of the replica jar with mutated policies, runs the 27-step battery,
-# the probe runner and the corpus replay, bisects a limit, adapts to a v2 policy
-# and checks for false alarms. It also demonstrates the monitor/runner features:
-# contract check (/health with and without token, /__reset, 404), p50/p99/max
-# latency + metrics in harness/metrics.jsonl, control-vs-control noise floor
-# (--noise), INFRA vs service classification (503/X-Frontier-Infra stub) and
-# partial re-recording (--from-diff). The original's daily budget lives in
-# harness/budget.json (not touched here: everything runs against local
-# emulators). It writes lab/REPORTE_run.md and shuts down all processes on exit.
+# Local test laboratory: detection -> localization -> adaptation, never touching the original.
+# Launches replica jars with mutated policies, runs the battery, the probe runner and the corpus
+# replay, bisects a limit, adapts to v2, checks false alarms, and exercises the contract check,
+# metrics, noise floor, INFRA classification and partial re-recording. Writes lab/REPORTE_run.md
+# and shuts every process down on exit.
 #
 # Usage:  bash lab/run_lab.sh
-# =============================================================================
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -167,15 +157,14 @@ log "=== STEP 6: false alarms (3 rounds vs v1) ==="
     --token $TOKEN 2>&1 | grep -vE '^\[sondas\]' | grep -iE 'ronda|battery|ALERTA|fin' ) \
   | tee "$EVID/6_falsas_alarmas.txt"
 
-# --- 6b. Contract check + noise floor + latency + metrics (new features)
+# --- 6b. Contract check + noise floor + latency + metrics
 log "=== STEP 6b: contract + noise + latency + metrics vs v1 ==="
 ( cd "$HARNESS" && python3 monitor.py --once --long --noise 3 \
     --target http://localhost:8091 --token $TOKEN 2>&1 \
     | grep -iE 'contract|noise|latency|metrics|budget' ) \
   | tee "$EVID/6b_contrato_ruido.txt"
 
-# --- 6c. INFRA vs service classification (local stub: 503 + X-Frontier-Infra +
-#         "Application not found"); must classify INFRA, NOT alert, and retry.
+# --- 6c. INFRA vs service (stub: 503 + X-Frontier-Infra + "Application not found"): INFRA, no alert, retry
 log "=== STEP 6c: INFRA classification (local stub :8198) ==="
 python3 - <<'PY' &
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -193,8 +182,7 @@ STUB=$!; sleep 1
   | tee "$EVID/6c_infra.txt"
 kill "$STUB" 2>/dev/null
 
-# --- 6d. PARTIAL re-recording (--from-diff): replaying the v1 corpus vs mutant A
-#         produces diffs; record re-records only those cases and merges them.
+# --- 6d. PARTIAL re-recording (--from-diff): only the cases that differ vs mutant A are re-recorded and merged
 log "=== STEP 6d: partial re-record --from-diff (mutant A :8092) ==="
 ( cd "$HARNESS" && python3 replay.py --target http://localhost:8092 --token $TOKEN \
     --cases ../corpus/battery.jsonl ../corpus/singles.jsonl --max-diffs 40 \

@@ -6,10 +6,8 @@ import io.vertx.core.json.JsonObject
 import java.io.File
 
 /**
- * Loads `policy-<version>.json` from the classpath, from a file when POLICY is an existing path,
- * or from POLICY_JSON (inline JSON) for a hot fix without a rebuild. Missing optional sections fall back
- * to today's production values, so a minimal policy only needs `commands`, `responses` and `errors`.
- * [validate] fails fast at start-up when a name the runtime will need cannot be resolved.
+ * Loads `policy-<version>.json` from the classpath, a file (POLICY=path) or POLICY_JSON (inline).
+ * Missing optional sections fall back to today's production values; [validate] fails fast at start-up.
  */
 object PolicyLoader {
     private val defaultIntegrityOrder = listOf("FaltaControl", "SegmentoVacio", "ControlMalFormado", "ControlInvalido", "ComandoDesconocido", "Aridad")
@@ -108,10 +106,7 @@ object PolicyLoader {
         return policy
     }
 
-    /**
-     * Fails at load time (not with a 5xx at request time) when the policy references something the runtime
-     * cannot resolve: rule names, effects, response keys and the error codes the HTTP and integrity stages emit.
-     */
+    /** Fails at load time, not with a 5xx at request time, when a referenced rule/effect/response/error does not resolve. */
     fun validate(p: Policy) {
         val missing = mutableListOf<String>()
         fun needError(code: String, why: String) { if (code !in p.errors) missing += "error $code ($why)" }

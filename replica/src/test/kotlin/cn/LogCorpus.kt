@@ -10,19 +10,12 @@ data class LogLine(val n: Int, val section: String, val method: String, val path
 object LogCorpus {
     val file: File = File(System.getProperty("log.path") ?: "../experiments/log.jsonl")
 
-    /**
-     * Log lines before which the original was reset by a client that did not write to this log
-     * (another tool sharing the same token). The log itself is never edited; the replay inserts a
-     * synthetic successful POST /__reset so the recorded state matches. Each entry cites the evidence.
-     */
+    /** Lines before which another client (same token) reset the original; the replay inserts a synthetic reset there. */
     private val externalResets: Set<Int> = setOf(
         1727, // 14:21:40 ALTA;Lucia -> AC-0001 right after an E302 of the same battery: a differential fuzzer reset the service out of band.
     )
 
-    /**
-     * Lines whose request body the client compacted (> 2000 chars) in a way that loses its shape, so the
-     * synthetic reconstruction below cannot reproduce them. Covered instead by explicit tests in RobustnessTest.
-     */
+    /** Bodies compacted by the client (> 2000 chars) beyond reconstruction; covered by RobustnessTest instead. */
     private val compactedBodies: Set<Int> = setOf(
         3382, // 4096-byte truncation of a {"m":"PING;XX","p":"aaa..."} body (invalid JSON) -> E100
         3740, // 6000-byte valid body with a padding key -> 200 pong

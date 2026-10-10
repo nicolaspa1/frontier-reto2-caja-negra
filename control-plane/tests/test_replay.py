@@ -116,7 +116,6 @@ def test_diff_line_format_is_parsed_by_record(tmp_path):
     """Guard the cross-script contract: record.parse_diff_report must extract
     the case_id from a line printed by replay.main in its exact format."""
     cid, i, cmd, reason = "single-07", 2, "ALTA", "body differs"
-    # exactly the format replay.main uses to print each diff
     line = f"   {cid} paso {i} [{cmd}]: {reason}\n"
     report = tmp_path / "diffreport.txt"
     report.write_text(line, encoding="utf-8")

@@ -1,47 +1,22 @@
 #!/usr/bin/env python3
-"""Automated adaptation cycle for Challenge 2 "The black box".
+"""Automated adaptation cycle: derive the next policy from observed behaviour.
 
-When the original service changes a rule during the day, this script derives the
-next policy from *observed behaviour* instead of guessing it. It never calls the
-original: it talks only to LOCAL emulators (a replica jar started on localhost)
-and to recorded corpus files.
-
-Pipeline (one `run` subcommand, five phases):
-
-  1. detect     Replay the base corpus (recorded against the previous version)
-                against the changed target and collect every step-level diff
-                (case, step, message, expected, observed). Reuses replay.py.
-  2. classify   Label each diff as a numeric-limit change, a response-format
-                change, a status change for the same error code, or unknown, and
-                group diffs by error code / response key.
-  3. localize   Recover the exact new values from the target with surgical
-                probes on a clean state (reset between probes; 3 failed
-                transfers block the origin, so probes reset):
-                  - transfer limit  -> bisect the maximum accepted amount.
-                  - block threshold -> count failures until E510.
-                  - response format -> derive the body template from observed
-                    bodies, keeping the base placeholders; a numeric value that
-                    is now a 2-decimal string becomes ${saldoDecimal}; a new
-                    numeric key that increments 1,2,3 across repeats becomes
-                    ${intentos} (the only counter the replica exposes).
-                  - status change   -> take the observed status.
-                  - initial balance -> read a fresh account's balance.
-                Every probe request/response is written to
-                control-plane/local/adapt-probes.jsonl and cited as evidence.
-                Unknown diffs are reported, never guessed.
-  4. propose    Write the candidate policy = base policy + localized changes,
-                each with `value`/`status`/`body`, `evidencia` (probe lines) and
-                `nota`. Print a human summary (what changed, old -> new).
-  5. verify     Start a local jar with POLICY=<candidate> on a free port, replay
-                the corpus recorded from the target, and report equal/total.
-                Exit 0 only at 100%; otherwise list the remaining diffs (those
-                need code, e.g. a new mechanism).
+Never calls the original; talks only to LOCAL emulators (replica jar on localhost)
+and recorded corpus files. `run` chains five phases:
+  1. detect    replay the base corpus against the changed target, collect step diffs (replay.py)
+  2. classify  numeric-limit / response-format / status-change-same-code / unknown, grouped by code
+  3. localize  surgical probes on a clean state: bisect the transfer limit, count failures to
+               E510, derive body templates (numeric -> 2-decimal string = ${saldoDecimal},
+               new counter 1,2,3 = ${intentos}), read the initial balance. Every probe is written
+               to control-plane/local/adapt-probes.jsonl and cited. Unknown diffs are reported, never guessed.
+  4. propose   base policy + localized changes (value/status/body, evidencia, nota)
+  5. verify    start a jar with POLICY=<candidate>, replay the target corpus; exit 0 only at 100%
 
 CLI:
-  python3 adapt.py run --target http://localhost:8201 --token T \\
-      --base rules/policy-v1.json --out rules/policy-candidate.json \\
-      [--corpus control-plane/corpus] \\
-      [--corpus-target-dir control-plane/corpus-v2 | --corpus-out DIR] \\
+  python3 adapt.py run --target http://localhost:8201 --token T \
+      --base rules/policy-v1.json --out rules/policy-candidate.json \
+      [--corpus control-plane/corpus] \
+      [--corpus-target-dir control-plane/corpus-v2 | --corpus-out DIR] \
       [--budget N] [--no-verify]
 
 Local targets only (localhost / 127.0.0.1); any other host is refused.
@@ -76,9 +51,7 @@ CORPUS_FILES = ["battery.jsonl", "singles.jsonl", "sequences-short.jsonl",
                 "sequences-long.jsonl", "pending.jsonl"]
 
 
-# --------------------------------------------------------------------------- #
-# Small helpers
-# --------------------------------------------------------------------------- #
+# --- Small helpers
 def decimal(cents):
     """Render an integer amount as a 2-decimal string (unit = 1/100), matching
     the replica's `decimal()` (22 -> "0.22", 1000000 -> "10000.00", -100 -> "-1.00")."""
@@ -153,9 +126,7 @@ def corpus_files(directory):
     return files
 
 
-# --------------------------------------------------------------------------- #
-# Probe transcript (evidence for local targets)
-# --------------------------------------------------------------------------- #
+# --- Probe transcript (evidence for local targets)
 class ProbeLog:
     def __init__(self, path):
         self.path = path
@@ -202,9 +173,7 @@ class ProbeClient:
         self.c.close()
 
 
-# --------------------------------------------------------------------------- #
-# Phase 1: detect
-# --------------------------------------------------------------------------- #
+# --- Phase 1: detect
 def detect(files, target, token):
     cases = R.load_cases(files)
     t = R.HttpxTransport(target, token)
@@ -237,9 +206,7 @@ def detect(files, target, token):
     return diffs
 
 
-# --------------------------------------------------------------------------- #
-# Phase 2: classify
-# --------------------------------------------------------------------------- #
+# --- Phase 2: classify
 def response_key_of(base, body):
     """Match a success body to a base `responses` key by its top-level key set."""
     obj = _parse(body)
@@ -292,9 +259,7 @@ def classify(diffs, base):
     return groups, unknown
 
 
-# --------------------------------------------------------------------------- #
-# Template derivation
-# --------------------------------------------------------------------------- #
+# --- Template derivation
 def _template_to_json(body):
     """Replace ${...} placeholders with parseable sentinel strings."""
     s = re.sub(r'"\$\{[^}]+\}"', '"\u0000Q\u0000"', body)
@@ -410,9 +375,7 @@ def derive_body(base_body, observed_list, expected_list=None):
     return build(rep, ""), unknown
 
 
-# --------------------------------------------------------------------------- #
-# Phase 3: localize (probes against the target)
-# --------------------------------------------------------------------------- #
+# --- Phase 3: localize (probes against the target)
 def _setup_transfer(probe, section):
     probe.reset(section)
     probe.send("ALTA;L", section)                     # AC-0001
@@ -602,9 +565,7 @@ def localize(diffs, groups, base, probe):
     return changes
 
 
-# --------------------------------------------------------------------------- #
-# Phase 4: propose
-# --------------------------------------------------------------------------- #
+# --- Phase 4: propose
 def propose(base, changes):
     cand = copy.deepcopy(base)
     cand["version"] = "candidate"
@@ -643,9 +604,7 @@ def print_summary(changes, unknown):
             print(f"   ... and {len(unknown) - 10} more")
 
 
-# --------------------------------------------------------------------------- #
-# Phase 5: verify
-# --------------------------------------------------------------------------- #
+# --- Phase 5: verify
 def free_port():
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
@@ -700,9 +659,7 @@ def verify(candidate_path, corpus_dir, token):
     return res
 
 
-# --------------------------------------------------------------------------- #
-# record from target (optional, reuses record.py)
-# --------------------------------------------------------------------------- #
+# --- record from target (optional, reuses record.py)
 def record_from_target(target, token, out_dir, budget):
     import record as REC
     REC.OG = REC.TargetTransport(target, token)
@@ -717,9 +674,7 @@ def record_from_target(target, token, out_dir, budget):
     return REC.CORPUS
 
 
-# --------------------------------------------------------------------------- #
-# run
-# --------------------------------------------------------------------------- #
+# --- run
 def cmd_run(args):
     require_local(args.target)
     token = args.token or read_team_token()

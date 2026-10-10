@@ -10,10 +10,9 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Explicit coverage of version 2 of the original (ticket FR-0153, `rules/policy-v2.json`), independent of the recorded
- * log: transfer limit 50000 (L5760, L5559), E510 as 423 with `intentos` (L5562-L5564, L5660), the two-decimal balance
- * string of CONSULTA (L5565, L5566, L5580, L5605) and the `decimal()` formatter behind it. The last test runs the same
- * code with policy v1 to show that the difference is data.
+ * Version 2 of the original (ticket FR-0153, `rules/policy-v2.json`), independent of the log: transfer limit 50000
+ * (L5760, L5559), E510 as 423 with `intentos` (L5562-L5564), two-decimal CONSULTA balance (L5565, L5605).
+ * The last test runs the same code with policy v1: the difference is data.
  */
 class PolicyV2Test {
     private val v2 = TestSupport.policyV2()

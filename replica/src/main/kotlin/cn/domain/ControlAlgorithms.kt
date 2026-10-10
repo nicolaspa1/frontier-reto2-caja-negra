@@ -12,11 +12,7 @@ interface ControlAlgorithm {
     /** Expected control for "CMD;arg1;...;argN", or null when there is no single value (permissive). */
     fun expected(payload: String): Int?
 
-    /**
-     * Comparison according to policy.integrity.controlCompare:
-     *  - "canonical-string": the control must be exactly str(expected), no leading zeros ("03" != 3 -> E202, L1070)
-     *  - "numeric": integer comparison ("03" == 3)
-     */
+    /** policy.integrity.controlCompare: "canonical-string" = exact str(expected), "03" != 3 (L1070); "numeric" = int compare. */
     fun accepts(payload: String, control: String, compare: String = "canonical-string"): Boolean {
         val exp = expected(payload) ?: return true
         return when (compare) {
@@ -184,7 +180,7 @@ object ControlAlgorithms {
 
     /** harness/control-fit.json as written by fit.py: {"familia", "params", "verificado_sobre", "formula_texto"}. */
     fun fit(spec: Map<String, Any?>): ControlAlgorithm {
-        // Inline (no file, suitable for POLICY_JSON): {"name":"fit","familia":"...","params":{...}} = contents of control-fit.json
+        // inline form (POLICY_JSON): the contents of control-fit.json under {"name":"fit", ...}
         if (spec["params"] != null) {
             val params = spec["params"].let { if (it is io.vertx.core.json.JsonObject) it.map else @Suppress("UNCHECKED_CAST") (it as Map<String, Any?>) }
             return if (spec["familia"] == "permissive") PermissiveControl else FitControl(params)

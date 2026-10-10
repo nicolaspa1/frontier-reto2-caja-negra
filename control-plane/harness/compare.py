@@ -38,13 +38,7 @@ def normalize(body):
 
 
 def _semantic_equal(a, b):
-    """JSON equality ignoring object key order.
-
-    Arrays keep their order; numbers and strings must be identical.
-    Note: 1 and 1.0 are treated as distinct unless json represents them the
-    same way; to stay strict we compare bool and numbers by their Python type
-    and value, which is what json.loads produces for identical bodies.
-    """
+    """JSON equality ignoring object key order; arrays keep order, numbers/strings/bools compare by type and value."""
     if isinstance(a, dict) and isinstance(b, dict):
         if a.keys() != b.keys():
             return False
@@ -65,7 +59,6 @@ def bodies_equal(a, b):
     tb, vb = normalize(b)
     if ta == "json" and tb == "json":
         return _semantic_equal(va, vb)
-    # if either is not JSON: exact text
     return (a or "") == (b or "")
 
 

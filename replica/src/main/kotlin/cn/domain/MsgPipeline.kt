@@ -42,7 +42,7 @@ object IntegrityRegistry {
             if (p.controlAlgorithm.accepts(m.payload, m.control, p.controlCompare)) null else "E202"
         },
         "ComandoDesconocido" to IntegrityRule { m, p -> if (m.command in p.commands) null else "E301" },
-        // Unknown command is left to ComandoDesconocido (keeps working if the policy reorders the checks).
+        // unknown command is left to ComandoDesconocido, whatever the policy order
         "Aridad" to IntegrityRule { m, p -> p.commands[m.command]?.let { if (it.arity != m.args.size) "E302" else null } },
     )
     fun rule(name: String) = rules[name] ?: error("Unknown integrity rule in policy: $name")
@@ -96,10 +96,7 @@ class MsgPipeline(val policy: Policy, private val codec: JsonCodec) : MessageHan
         return policy.error(code)
     }
 
-    /**
-     * Variables available to error templates. E510 carries the number of attempts made while blocked, starting
-     * at 1 and cleared when the block is lifted (v2 `intentos`, L5562+; the v1 template ignores it).
-     */
+    /** E510 carries the attempts made while blocked, from 1, cleared when the block lifts (v2 `intentos`, L5562-L5564). */
     private fun errorVars(ctx: CommandContext, code: String): Map<String, Any> {
         if (code != "E510") return emptyMap()
         val acc = ctx.arg("origen")?.let(ledger::account) ?: return emptyMap()
@@ -116,9 +113,9 @@ class MsgPipeline(val policy: Policy, private val codec: JsonCodec) : MessageHan
 
     /** Applies the ledger effect named by the command spec. Arguments were validated by the command's rules. */
     private fun apply(ctx: CommandContext): Pair<Response, Operation?> = when (ctx.spec.effect) {
-        // Fixed response, ledger untouched: PING, HALT (409 E520, L894), NOTAS (L896)
+        // Fixed response, ledger untouched: PING, HALT (409 E520, L894), NOTAS (L896).
         "ping", "static" -> {
-            // Confirmed HALT (policy.halt): HALT;1 -> 503 E599 and the service stays halted until reset (L2272-L2278).
+            // Confirmed HALT (HALT;1) -> 503 E599, halted until reset (L2272-L2278)
             val halt = policy.halt
             if (halt != null && ctx.spec.name == halt.command && ctx.args.any { it in halt.confirmValues }) {
                 ledger.halted = true
@@ -171,13 +168,10 @@ object Levenshtein {
     }
 }
 
-/**
- * ASCII-only case folding: the original accepts `ping`/`Ping` but NOT `pıng` (dotless i), `PİNG`, `ſalta` or
- * `Kalta` (Kelvin sign), which a Unicode-aware uppercase would map onto PING/SALTA/KALTA (log L3732-L3739).
- */
+/** ASCII-only case folding: `pıng`, `PİNG`, `ſalta`, `Kalta` (Kelvin) are NOT accepted by the original (L3732-L3739). */
 internal fun asciiUpper(s: String): String = buildString(s.length) { for (c in s) append(if (c in 'a'..'z') c - 32 else c) }
 
-/** Balance rendered with two decimals, the unit being 1/100 of the stored amount (v2 CONSULTA: 22 -> "0.22", -100 -> "-1.00"; L5562+). */
+/** Two-decimal balance, unit = 1/100 of the stored amount (v2 CONSULTA: 22 -> "0.22", -100 -> "-1.00"; L5565, L5605). */
 internal fun decimal(cents: Long): String {
     val a = if (cents < 0) -cents else cents
     return (if (cents < 0) "-" else "") + (a / 100) + "." + (a % 100).toString().padStart(2, '0')

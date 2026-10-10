@@ -7,10 +7,8 @@ import io.vertx.core.json.Json
 import io.vertx.core.json.JsonObject
 
 /**
- * Decodes the envelope `{"<field>": "..."}` (field = policy.http.bodyField) with Vert.x/Jackson:
- * invalid JSON -> E100; not an object / field missing / field not a string -> E102.
- * Jackson's default stream constraints (nesting depth 1000, number length 1000) turn pathological
- * documents into [DecodeException] instead of stack overflows.
+ * Envelope decoder (field = policy.http.bodyField): invalid JSON -> E100; not an object / missing / not a string -> E102.
+ * Jackson's default stream constraints turn pathological nesting into [DecodeException], not stack overflows.
  */
 object VertxJsonCodec : JsonCodec {
     override fun extract(raw: String, field: String): Envelope {

@@ -13,12 +13,9 @@ import io.vertx.ext.web.Router
 import io.vertx.ext.web.RoutingContext
 
 /**
- * HTTP adapter. A single verticle = a single event loop, so `handle()`/`reset()` run serialised and the
- * in-memory ledger needs no locking.
- *
- * Request order: exact route match (path + method) BEFORE auth; unknown route -> E404 without looking at the token.
- * "Never 5xx": every failure path (router exceptions, oversized or aborted bodies, exceptions inside the domain)
- * ends in a policy-defined 4xx response.
+ * HTTP adapter. One verticle = one event loop: `handle()`/`reset()` run serialised, the ledger needs no locking.
+ * Route match (path + method) comes BEFORE auth: unknown route -> E404 regardless of token (L151-L196).
+ * Never 5xx: every failure path ends in a policy-defined 4xx.
  */
 class HttpVerticle(
     private val handler: MessageHandler,
@@ -74,10 +71,8 @@ class HttpVerticle(
     }
 
     /**
-     * Streams the body with a bounded buffer: at most `bodyMaxBytes` are kept in memory; anything larger is
-     * discarded and answered with the policy's too-large error once the request ends. Bodies that announce or
-     * exceed [HARD_BODY_CAP] are rejected immediately and the connection is closed. A client that aborts
-     * mid-body gets E100 (the reply is a no-op if the socket is already gone).
+     * Bounded body read: at most `bodyMaxBytes` are buffered, larger bodies answer the too-large error at end of
+     * request; beyond [HARD_BODY_CAP] (declared or streamed) the connection is closed at once. Aborted body -> E100.
      */
     private fun readBody(ctx: RoutingContext, onBody: (Buffer) -> Unit) {
         val req = ctx.request()

@@ -1,39 +1,26 @@
 #!/usr/bin/env python3
-"""Record sequences against the ORIGINAL service and store them as cases.
+"""Record sequences against the ORIGINAL service and store them as corpus cases.
 
-Each case is `{case_id, hipotesis, steps:[{m|raw, status, body}]}` recorded
-after a `POST /__reset`. Every request to the original goes through
-`experiments/cn.py` (labhelp.og_*), so it is appended to
-`experiments/log.jsonl` with a descriptive section that doubles as a
-hypothesis. Traffic is kept below 8 req/s.
+Each case is `{case_id, hipotesis, steps:[{m|raw, status, body}]}` recorded after
+a POST /__reset. Requests go through experiments/cn.py (labhelp.og_*), so they
+land in experiments/log.jsonl with a section that doubles as hypothesis; < 8 req/s.
+Payloads, hypotheses and labels are written verbatim into the byte-frozen corpus files.
 
-Groups (written to corpus/*.jsonl):
-  (a) battery  -> corpus/battery.jsonl  : the monitor's 27-step battery.
-  (b) singles  -> corpus/singles.jsonl  : ~42 single-request sequences
-      (each command and each error reachable with a single message).
-  (c) sequences-> corpus/sequences-short.jsonl (~45 of 2-5 steps) and
-      corpus/sequences-long.jsonl (~15 of 6-12 steps), generated from a simple
-      ledger model.
-  (d) pending  -> corpus/pending.jsonl  : the analysts' pending experiments
-      (accents/ñ/emoji in ALTA, block-counter reset, cumulative limit, account
-      cap, "00"/"+5"/3-digit controls).
-
-The corpus payloads, hypothesis sentences, section labels and "rule"/"variante"
-fields are kept in Spanish on purpose: they are written verbatim into the
-byte-frozen corpus/*.jsonl files and the hypothesis map.
+Groups (corpus/*.jsonl):
+  battery   -> battery.jsonl          the monitor's 27-step battery
+  singles   -> singles.jsonl          ~42 one-request cases (each command, each single-message error)
+  sequences -> sequences-short.jsonl (~45 x 2-5 steps), sequences-long.jsonl (~15 x 6-12 steps)
+  pending   -> pending.jsonl          analysts' pending experiments (non-ASCII names, block reset,
+                                      cumulative limit, account cap, odd controls)
 
 CLI:
-  python3 record.py all          # (a)+(b)+(c)+(d)  [default]
-  python3 record.py battery
-  python3 record.py singles
-  python3 record.py sequences
-  python3 record.py pending
+  python3 record.py all          # every group [default]
+  python3 record.py battery | singles | sequences | pending
   python3 record.py --budget 1200   # request cap against the original for this run
 
-PARTIAL re-recording (#7; additive, re-records everything by default):
-  python3 record.py --only-cases battery-27,single-05   # only those, merges
-  python3 record.py --from-diff lab/evidence/5_replay_v2.txt  # those hit by the diff
-  (both keep the rest of the corpus cases and can be combined with --target/--out-dir)
+Partial re-recording (merges into the existing corpus; combinable with --target/--out-dir):
+  python3 record.py --only-cases battery-27,single-05
+  python3 record.py --from-diff lab/evidence/5_replay_v2.txt  # the cases hit by a replay diff
 """
 import argparse
 import json
@@ -52,10 +39,8 @@ CORPUS = os.path.join(ROOT, "corpus")
 os.makedirs(CORPUS, exist_ok=True)
 
 
-# --- Transport (additive). Without --target: ORIGINAL via cn.py (logged +
-# throttled), behaviour identical to before. With --target/--token: a LOCAL
-# emulator over httpx, in-memory budget (does not touch experiments/log.jsonl
-# nor the real corpus unless --out-dir is given).
+# --- Transport: no --target -> ORIGINAL via cn.py (logged, throttled); --target/--token -> LOCAL
+# emulator over httpx with an in-memory budget (log.jsonl and the real corpus untouched unless --out-dir).
 class OrigTransport:
     def reset(self, section=""):
         return L.og_reset(section=section)
@@ -106,9 +91,7 @@ class TargetTransport:
 
 OG = OrigTransport()
 
-# PARTIAL re-recording (#7). SELECT=None => record everything (the usual
-# behaviour); SELECT={ids} => record ONLY those case_id and merge them into the
-# existing corpus, keeping the rest of the cases as-is.
+# Partial re-recording: SELECT=None records everything; SELECT={ids} records only those and merges.
 SELECT = None
 
 
@@ -131,8 +114,7 @@ def parse_diff_report(path):
     return ids
 
 
-# case_id prefixes per group, to skip a whole group when no selected id falls
-# into it (partial re-recording).
+# case_id prefixes per group: skip a group when no selected id falls into it.
 GROUP_PREFIXES = {
     "battery": ("battery-",),
     "singles": ("single-",),
@@ -307,7 +289,6 @@ def gen_sequence(rng, nsteps):
     payloads = []
     naccts = 0
     op = 0  # optimistic OP counter to reference from ANULA
-    # start with 1-2 ALTA to have accounts
     for _ in range(rng.randint(1, 2)):
         naccts += 1
         payloads.append(f"ALTA;Nombre{naccts}")
@@ -344,7 +325,7 @@ def gen_sequence(rng, nsteps):
     return payloads[:nsteps]
 
 
-# Secuencias curadas que garantizan cobertura de reglas clave.
+# Curated sequences that cover the key rules.
 CURATED_SHORT = [
     ("depósito y consulta reflejan saldo",
      ["ALTA;Lucia", "DEPOSITO;AC-0001;250000", "CONSULTA;AC-0001"]),
@@ -407,7 +388,6 @@ def do_sequences(budget):
         cid = f"seq-short-cur-{i:02d}"
         steps = [control.message(p) for p in pls]
         short.append(run_case(budget, cid, hip, steps, f"seq-short:{hip[:48]}"))
-    # fill up to ~45 short sequences with the generator
     i = len(CURATED_SHORT)
     while len(short) < 45:
         i += 1
@@ -442,8 +422,7 @@ def do_pending(budget):
     cases = []
     findings = []
 
-    # (d1) ALTA with accented/non-ASCII names and emoji: control discarding non-ASCII (control.py)
-    #      vs control normalizing accents to ASCII. Note which one is accepted.
+    # (d1) non-ASCII names: control dropping non-ASCII (control.py) vs control folding accents
     if selected("pending-nombres-no-ascii"):
         nombres = ["Jose", "José", "Muñoz", "Renée", "Ángela", "Ana😀"]
         sec = "pending: ALTA nombres no-ASCII, control descartando vs normalizando"
@@ -535,8 +514,7 @@ def do_pending(budget):
     OG.msg(control.message("ALTA;Lucia"), section=sec)  # creates AC-0001 for CONSULTA
     base = "CONSULTA;AC-0001"
     ctrl_ok = control.control(base)
-    # NOTE: the variant labels are written as the "variante" field of
-    # corpus/pending.jsonl, so they are kept in Spanish for byte-compatibility.
+    # variant labels are written verbatim as the "variante" field of pending.jsonl
     variants = [
         ("00", f"{base};00"),
         ("+5", f"{base};+5"),

@@ -1,14 +1,6 @@
-"""Offline unit tests for adapt.py (no jars, no network).
-
-They exercise the two pure pieces of the adaptation pipeline:
-  * the diff CLASSIFIER (adapt.classify): today's three v2 changes must come out
-    as three groups with the right class (numeric limit / response format /
-    status change for the same error code), and a cascade diff must be reported
-    as unknown.
-  * the TEMPLATE DERIVATION (adapt.derive_body): a numeric value rendered as a
-    2-decimal string -> ${saldoDecimal}; a new numeric key that increments
-    1,2,3 across repeats -> ${intentos}; a changed literal is taken verbatim; a
-    non-incrementing new key is reported as unknown (never guessed).
+"""Offline tests for adapt.py's pure pieces: the diff classifier (today's three v2 changes
+come out as three groups, a cascade is unknown) and template derivation (2-decimal string
+-> ${saldoDecimal}, 1,2,3 counter -> ${intentos}, changed literal verbatim, else unknown).
 """
 import json
 import os

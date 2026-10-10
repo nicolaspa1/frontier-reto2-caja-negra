@@ -1,15 +1,6 @@
-"""Read-only test of `genspec.py --check`.
-
-genspec reads a hardcoded log path and (even under --check) rewrites the
-output document, so this test:
-  * points genspec.OUT at a temp file (never touching spec/especificacion.md),
-  * feeds it a FROZEN snapshot of experiments/log.jsonl taken from the git
-    HEAD commit, which is the log the committed especificacion.md was built
-    from. This keeps the check deterministic even though a live monitor keeps
-    appending to the working-tree log.
-
-If git or the HEAD snapshot is unavailable the test skips rather than giving a
-misleading pass/fail.
+"""Read-only `genspec.py --check`: OUT is redirected to a temp file and the input is the frozen
+log snapshot from git HEAD (the one the committed especificacion.md was built from), so a
+live monitor appending to the working-tree log cannot make it flaky. Skips without git.
 """
 import os
 import subprocess

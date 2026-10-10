@@ -17,10 +17,8 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /**
- * "Never 5xx" fuzzing. A seeded generator produces 500 hostile messages (random bytes, very long, unicode, nested
- * separators, huge/negative/overflowing numbers, control-field edge cases, mutated valid commands) plus raw envelope
- * garbage, and pushes them through the domain and over real HTTP. Oracles: no exception escapes, status < 500,
- * body is JSON from the policy, and a well-formed envelope never yields E100 (which would mean a swallowed exception).
+ * "Never 5xx" fuzzing: 500 seeded hostile messages plus raw envelope garbage, through the domain and over real HTTP.
+ * Oracles: no exception escapes, status < 500, body is policy JSON, a well-formed envelope never yields E100.
  */
 class RobustnessTest {
     private val seed = 20261010L

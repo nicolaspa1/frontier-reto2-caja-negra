@@ -1,92 +1,32 @@
 #!/usr/bin/env python3
-"""CONTROL-ALGORITHM SEARCHER - Challenge 2 "The black box".
+"""Control-algorithm searcher: re-fits the control function offline from the log.
 
-Infers OFFLINE (without touching the original service) which control algorithm
-the black box uses today, and produces a serializable `control(payload)`
-function the replacement can load. Today the algorithm is ISO 7064 MOD 97-10
-(see experiments/control.py; an earlier one-off brute-force script found it), but it
-COULD CHANGE: this script does not assume the algorithm, it RE-FITS it from
-evidence.
+Oracle = experiments/log.jsonl only. From every POST /msg with m = "CMD;...;cc"
+the pair (payload, control) is extracted:
+  * ACCEPTED: response other than E100-E104/E201/E202/E301 and command != PING
+    (PING is exempt, so it never reveals the control). Business errors such as
+    E401/E506 count as accepted: E202 is checked before them.
+  * REJECTED: E202.
+  * "03"-style controls are excluded: they fail by canonical form (L1070), not by value.
 
-OFFLINE ORACLE
---------------
-The only allowed oracle = the log (experiments/log.jsonl). From every POST /msg
-with body {"m": "CMD;arg1;...;argN;cc"} the pair (payload, control) is extracted,
-where payload = everything up to the last ';' and control = the last segment
-(1-2 digits).
+Candidate family (cartesian product): case {upper,lower,raw} x kept separators
+{none,';','-',';-'} x non-ASCII {drop,map} x alphabet {A=1..26, A=10..35, ASCII}
+x aggregation {ISO 7064 concat + suffix, byte sum, weighted sum, polynomial}
+x modulus {97,11,10,100,256,1000,10007} x formula {rem, 98-, 97-, m-, m+1-, Luhn,
+Verhoeff, Damm}. Consistent candidates are ordered by simplicity.
 
-  * ACCEPTED  (correct control): response OTHER than E201/E202/E103/E104, a
-    KNOWN command (not E301) and command != PING (PING is exempt from control:
-    `PING;1` returns 200 even if the control does not match, so it never reveals
-    the real control and is discarded). Note that E401/E402/E506/E507/E510/E302/
-    E303/E304... DO count as accepted: the control layer (E202) is validated
-    BEFORE the command (E301) and the business rules, so any later error proves
-    the control was valid.
-  * REJECTED (incorrect control): response with error E202.
+Degraded mode: with no consistent candidate, control-fit.json gets
+familia="permissive" (any 1-2 digit control is accepted, never E202). It loses
+only the wrong-control cases expecting E202 and keeps every correct-control case.
 
-`--from-jsonl FILE` uses another file (a full log, or pairs
-{"payload":..,"control":..,"accepted":bool}), e.g. new responses recorded after
-a change in the original.
-
-CANDIDATE FAMILY (cartesian product, all computable without the network)
-------------------------------------------------------------------------
-  normalizer : case {upper, lower, raw}
-             : kept separators {none, ';', '-', ';-'} (anything else
-               non-alphanumeric is discarded)
-             : non-ASCII {drop, map by ordinal}
-  alphabet   : A=1..26 | A=10..35 | ASCII ordinal        (iso_concat only)
-  aggregation: ISO 7064-style decimal concatenation with suffix {"00","0",""}
-             | byte sum | position-weighted sum
-             | polynomial base B mod m
-  modulus    : 97, 11, 10, 100, 256, 1000, 10007
-  formula    : remainder | 98-remainder | 97-remainder | m-remainder | m+1-remainder
-             | Luhn | Verhoeff | Damm   (the last 3 over the digit string)
-
-The current ISO candidate = (iso_concat, suffix "00", A=1..26, drop
-non-alphanumeric, drop non-ASCII, modulus 97, formula 98-remainder,
-case-insensitive).
-
-MODES
------
-  fit      (default)  Enumerate the family, return the candidates consistent
-                      with ALL accepted and NO E202, ordered by simplicity;
-                      print the formula as text and write
-                      harness/control-fit.json {familia, params, verificado_sobre}.
-  plan                If there is no consistent candidate: pick 2 distinct short
-                      payloads ("ALTA;A", "ALTA;AB") and, per payload, the list
-                      of controls 0..99 to try (distinct candidate predictions
-                      first) until the first 2xx/4xx != E202. It estimates
-                      expected and maximum requests (<=200) and writes
-                      harness/fit-plan.jsonl with messages "PAYLOAD;cc".
-  ingest FILE         Read responses recorded by the plan (log format) and
-                      re-run fit over the log + new responses.
-  --selftest          Regression tests (<30 s).
-
-DEGRADED MODE (if there is still no candidate after the plan)
--------------------------------------------------------------
-The replacement sets controlAlgorithm = "permissive": it accepts ANY control
-that matches the format (1-2 digits) and SKIPS the value check -> it never emits
-E202. E103 (missing control), E104 (empty), E201 (malformed) and the rest of the
-pipeline are preserved. Mark it in the spec as SUPUESTO (assumed).
-  * What is lost in the eval: only the cases that send an INCORRECT numeric
-    control expecting E202 (e.g. `ALTA;Lucia;83`->E202). They are a minority.
-  * What is gained: not breaking the CORRECT-control cases (the majority), which
-    is what would happen if we guessed the algorithm wrong (EVERYTHING would
-    fail). Permissive is the minimum-loss bet.
-`control_permissive(payload)` below implements this policy and control-fit.json
-records familia="permissive" when there is no fit.
-
-NOTE: the control-fit.json field names (familia, params, verificado_sobre,
-formula_texto), the family values written there and the formula_texto strings
-produced by formula_text() are kept in Spanish on purpose, so control-fit.json
-stays byte-compatible.
+Output control-fit.json keeps its field names and formula_texto wording frozen
+(the replica's FitControl reads it).
 
 USAGE
------
   python3 harness/fit.py                       # fit over the current log
   python3 harness/fit.py fit --from-jsonl x.jsonl
-  python3 harness/fit.py plan                  # if it does not converge: probe plan
-  python3 harness/fit.py ingest recorded.jsonl # re-fit with new responses
+  python3 harness/fit.py plan                  # no fit: <=200-request probe plan -> fit-plan.jsonl
+  python3 harness/fit.py ingest recorded.jsonl # re-fit with the plan's recorded responses
   python3 harness/fit.py --selftest
 """
 from __future__ import annotations
@@ -101,15 +41,12 @@ DEFAULT_LOG = os.path.join(ROOT, "experiments", "log.jsonl")
 FIT_OUT = os.path.join(ROOT, "harness", "control-fit.json")
 PLAN_OUT = os.path.join(ROOT, "harness", "fit-plan.jsonl")
 
-# Errors meaning "the control did NOT get validated properly" or "unknown
-# command / invalid body": they are excluded from the accepted set.
+# Responses that say nothing about the control value.
 EXCLUDE_CODES = {"E100", "E101", "E102", "E103", "E104", "E201", "E202", "E301", "E001"}
 CONTROL_BAD_CODE = "E202"
 EXEMPT_COMMANDS = {"PING"}
 
-# --------------------------------------------------------------------------- #
-# Control digits: Luhn / Damm / Verhoeff (operate over a digit string)
-# --------------------------------------------------------------------------- #
+# --- Control digits: Luhn / Damm / Verhoeff (operate over a digit string)
 def luhn_digit(s: str) -> int:
     total = 0
     for i, ch in enumerate(reversed(s)):
@@ -177,9 +114,7 @@ def verhoeff_digit(s: str) -> int:
 
 DIGIT_FORMULAS = {"luhn": luhn_digit, "damm": damm_digit, "verhoeff": verhoeff_digit}
 
-# --------------------------------------------------------------------------- #
-# Family parameters
-# --------------------------------------------------------------------------- #
+# --- Family parameters
 CASES = ("upper", "lower", "raw")
 KEEPS = ("", ";", "-", ";-")          # separators kept besides alphanumerics
 NONASCII = ("drop", "map")
@@ -192,9 +127,7 @@ DIGIT_FORMULA_NAMES = ("luhn", "verhoeff", "damm")
 DEFAULT_POLY_BASES = (2, 7, 10, 16, 31, 33, 37, 41, 101, 256)
 
 
-# --------------------------------------------------------------------------- #
-# Normalization and aggregation
-# --------------------------------------------------------------------------- #
+# --- Normalization and aggregation
 def normalize(payload: str, case: str, keep: str, nonascii: str) -> str:
     if case == "upper":
         payload = payload.upper()
@@ -207,11 +140,9 @@ def normalize(payload: str, case: str, keep: str, nonascii: str) -> str:
                 out.append(ch)
             elif ch in keep:
                 out.append(ch)
-            # other non-alphanumeric ASCII -> discard
         else:
             if nonascii == "map":
                 out.append(ch)
-            # nonascii == "drop" -> discard
     return "".join(out)
 
 
@@ -257,8 +188,7 @@ def apply_num_formula(n: int, m: int, formula: str) -> int:
 
 
 def formula_text(p: dict) -> str:
-    # The returned text is stored as control-fit.json "formula_texto", so it is
-    # kept in Spanish on purpose to keep that file byte-compatible.
+    # Written verbatim as control-fit.json formula_texto; wording is frozen.
     agg = p["agg"]
     keepdesc = {"": "descartar no-alfanuméricos", ";": "conservar ';'",
                 "-": "conservar '-'", ";-": "conservar ';' y '-'"}[p["keep"]]
@@ -281,9 +211,7 @@ def formula_text(p: dict) -> str:
     return f"norm[{norm}]; {body}; m={p['m']}; control = {ftext}"
 
 
-# --------------------------------------------------------------------------- #
-# Evaluating a candidate
-# --------------------------------------------------------------------------- #
+# --- Evaluating a candidate
 def make_control(p: dict):
     """Return a control(payload)->int|None function for params p."""
     case, keep, na = p["case"], p["keep"], p["nonascii"]
@@ -300,7 +228,6 @@ def make_control(p: dict):
                 return DIGIT_FORMULAS[formula](digits)
             n = int(digits + p["suffix"])
             return apply_num_formula(n, p["m"], formula)
-        # byte-based aggregations
         b = s.encode("utf-8", "surrogatepass") if any(ord(c) > 127 for c in s) else s.encode()
         if not b:
             return None
@@ -334,9 +261,7 @@ def simplicity(p: dict) -> int:
     return cost
 
 
-# --------------------------------------------------------------------------- #
-# Family generation (canonicalizes inactive dimensions to deduplicate)
-# --------------------------------------------------------------------------- #
+# --- Family generation (canonicalizes inactive dimensions to deduplicate)
 def enumerate_family(poly_bases=DEFAULT_POLY_BASES):
     seen = set()
     raw = 0
@@ -380,9 +305,7 @@ def space_size(poly_bases=DEFAULT_POLY_BASES):
     return getattr(enumerate_family, "last_raw", len(fam)), len(fam)
 
 
-# --------------------------------------------------------------------------- #
-# Oracle: pair extraction from the log
-# --------------------------------------------------------------------------- #
+# --- Oracle: pair extraction from the log
 def _code_of(res: dict):
     body = res.get("body", "")
     try:
@@ -454,9 +377,7 @@ def extract_from_log(path: str):
     return list(accepted.keys()), list(rejected.keys())
 
 
-# --------------------------------------------------------------------------- #
-# FIT
-# --------------------------------------------------------------------------- #
+# --- FIT
 def fit(accepted, rejected, poly_bases=DEFAULT_POLY_BASES):
     """Return the list of consistent (params, control_fn), ordered by simplicity."""
     consistent = []
@@ -497,9 +418,7 @@ def serialize(p: dict, n_verified: int) -> dict:
 
 
 def control_permissive(payload: str):
-    """Degraded mode: no value is inferred -> any control with valid format is
-    accepted. Returns None = 'do not verify value' (the replacement does not
-    emit E202 and only requires ^[0-9]{1,2}$)."""
+    """Degraded mode: None = do not verify the value (format check only, never E202)."""
     return None
 
 
@@ -511,8 +430,6 @@ def run_fit(accepted, rejected, poly_bases=DEFAULT_POLY_BASES, out=FIT_OUT, quie
             print("NO candidate is consistent with the oracle.")
             print("-> run 'plan' mode to discriminate with the original, or use degraded mode.")
             print("   (control-fit.json is written with familia='permissive')")
-        # NOTE: this formula_texto string is kept in Spanish on purpose for
-        # control-fit.json byte-compatibility.
         spec = {"familia": "permissive", "params": {}, "verificado_sobre": n,
                 "formula_texto": "modo degradado: aceptar cualquier control 1-2 dígitos (SUPUESTO)"}
         with open(out, "w", encoding="utf-8") as fh:
@@ -535,14 +452,11 @@ def run_fit(accepted, rejected, poly_bases=DEFAULT_POLY_BASES, out=FIT_OUT, quie
     return best, consistent
 
 
-# --------------------------------------------------------------------------- #
-# PLAN
-# --------------------------------------------------------------------------- #
+# --- PLAN
 def run_plan(accepted, rejected, poly_bases=DEFAULT_POLY_BASES, out=PLAN_OUT,
              payloads=("ALTA;A", "ALTA;AB"), quiet=False):
     """Propose probes to the original to discriminate with <=200 requests."""
-    # Candidates that at least pass the known accepted ones (if any); if there
-    # are none, we use the whole family to enumerate predictions.
+    # No survivor: enumerate the whole family's predictions.
     survivors = fit(accepted, rejected, poly_bases)
     if not survivors:
         survivors = list(enumerate_family(poly_bases))
@@ -563,11 +477,9 @@ def run_plan(accepted, rejected, poly_bases=DEFAULT_POLY_BASES, out=PLAN_OUT,
             if c not in seen:
                 seen.add(c)
                 preds.append(c)
-        # order: distinct predictions first, then the rest 0..99
         order = preds + [c for c in range(100) if c not in seen]
         order = order[:100]
-        # expected: if a candidate is right, the real control is among 'preds';
-        # expected cost ~ half of |preds| (+1); maximum = len(order)
+        # if some candidate is right the answer is among preds: expected cost ~ |preds|/2
         exp = (len(preds) + 1) // 2 if preds else 50
         total_expected += exp
         total_max += len(order)
@@ -591,9 +503,7 @@ def run_plan(accepted, rejected, poly_bases=DEFAULT_POLY_BASES, out=PLAN_OUT,
     return plan, total_expected, total_max
 
 
-# --------------------------------------------------------------------------- #
-# INGEST
-# --------------------------------------------------------------------------- #
+# --- INGEST
 def run_ingest(extra_file: str, base_log=DEFAULT_LOG, poly_bases=DEFAULT_POLY_BASES,
                out=FIT_OUT, quiet=False):
     a1, r1 = extract_from_log(base_log) if os.path.exists(base_log) else ([], [])
@@ -605,9 +515,7 @@ def run_ingest(extra_file: str, base_log=DEFAULT_LOG, poly_bases=DEFAULT_POLY_BA
     return run_fit(accepted, rejected, poly_bases, out, quiet)
 
 
-# --------------------------------------------------------------------------- #
-# SELFTEST
-# --------------------------------------------------------------------------- #
+# --- SELFTEST
 def _gen_pairs(p, payloads):
     ctl = make_control(p)
     return [(pl, ctl(pl)) for pl in payloads if ctl(pl) is not None]
@@ -631,18 +539,14 @@ def selftest():
     assert best["m"] == 97, f"m={best['m']}"
     assert best["formula"] == "98-", f"formula={best['formula']}"
     assert best["suffix"] == "00", f"suffix={best['suffix']}"
-    # case-insensitive: the canonical one does not depend on case (eff_case None)
     assert best.get("case") is None, f"case={best.get('case')}"
-    # it is the unique minimum-simplicity candidate
     assert simplicity(consistent[0]) < simplicity(consistent[1]), "the simplest one is not unique"
-    # reproduces the reference control.py
     ref = _ref_control
     for pl, _ in accepted:
         assert make_control(best)(pl) == ref(pl), f"differs from control.py on {pl!r}"
     print(f"(1) real log -> ISO 7064 MOD 97-10, drop non-alnum, A=1..26 case-insensitive. "
           f"OK ({len(accepted)} accepted, {len(rejected)} E202; {len(consistent)} consistent)")
 
-    # varied test payloads
     probes = ["ALTA;Lucia", "CONSULTA;AC-0001", "TRANSFER;AC-0001;AC-0002;40000",
               "DEPOSITO;AC-0002;700", "FOO;BAR;BAZ", "X;1", "HELLO;WORLD;99",
               "ANULA;OP-0003", "SALDOS;AC-0009", "TEST;ABCDEF;123456"]
@@ -689,9 +593,7 @@ def _ref_control(payload: str) -> int:
     return 98 - (n % 97)
 
 
-# --------------------------------------------------------------------------- #
-# CLI
-# --------------------------------------------------------------------------- #
+# --- CLI
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Control-algorithm searcher (offline).")
     ap.add_argument("mode", nargs="?", default="fit", choices=["fit", "plan", "ingest"])
@@ -722,7 +624,6 @@ def main(argv=None):
         run_plan(accepted, rejected, out=args.plan_out)
         return
 
-    # fit
     best, consistent = run_fit(accepted, rejected, out=args.out)
     if best is None:
         print("\n-> run: python3 harness/fit.py plan")

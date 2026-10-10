@@ -1,10 +1,6 @@
 package cn.domain
 
-/**
- * Immutable, parsed view of `policy-<version>.json`. Everything that can change without touching code lives here:
- * HTTP routing and auth scheme, message syntax, integrity order, control algorithm, limits, command specs,
- * and the exact status/body of every response and error.
- */
+/** Immutable, parsed view of `policy-<version>.json`: everything that can change without touching code. */
 
 /** Status plus body template; `${name}` placeholders are replaced literally by [render]. */
 data class ResponseSpec(val status: Int, val body: String) {

@@ -79,8 +79,7 @@ class ParametrizedPolicyTest {
         assertTrue(real.isFile, "missing ${real.absolutePath}: run `python3 control-plane/harness/fit.py fit` (the test must not be skipped silently)")
         val algo = ControlAlgorithms.from(mapOf("name" to "fit", "file" to real.absolutePath))
         if (JsonObject(real.readText(Charsets.UTF_8)).getString("familia") == "permissive") {
-            // fit.py found no candidate (e.g. because its oracle compares the control as an integer and L1070 rejects "03"):
-            // in degraded mode there is no value to verify. Warn and check only the permissive semantics.
+            // no candidate found by fit.py: degraded mode, only the permissive semantics can be checked
             println("WARNING: control-plane/harness/control-fit.json is in permissive mode; fit.py must treat '03' as a canonical-format rejection, not a value mismatch")
             assertEquals(null, algo.expected("ALTA;Lucia"))
             return

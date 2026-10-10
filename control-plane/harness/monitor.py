@@ -1,45 +1,30 @@
 #!/usr/bin/env python3
-"""Drift monitor for the ORIGINAL service (detects changes during the day).
+"""Drift monitor for the ORIGINAL service.
 
-Every N seconds it runs a CONTRACT CHECK (/health with and without token,
-/__reset, 404 route) and the 27-step battery (labhelp.BATTERY) after a reset,
-and compares them against the expected values (evaluator rule, compare.py). On a
-diff it REPEATS the sequence with a reset and, only if it PERSISTS, prints an
-ALERT with the message, the expected, the observed and the tagged rule. It
-writes harness/drift.log, leaves everything in experiments/log.jsonl under the
-"monitor" section (throttle < 8 req/s) and one line per round in
-harness/metrics.jsonl.
+Every N seconds: contract check (/health with and without token, /__reset, 404
+route) and the 27-step battery (labhelp.BATTERY) after a reset, compared with
+the expected values under the evaluator rule (compare.py). A diff is repeated
+after a reset and only a PERSISTENT diff becomes an ALERT (message, expected,
+observed, tagged rule). Writes harness/drift.log, one line per round in
+harness/metrics.jsonl (p50/p99/max ms, >5000 ms count, 5xx count) and leaves
+every request in experiments/log.jsonl under the "monitor" section (< 8 req/s).
 
-Features (all additive; without --target the transport is still cn.py -> original):
-  1. Per-round contract check: GET /health (with token -> 200 {"ok":true};
-     without token -> 401 E001), POST /__reset (exact body {"ok":true}) and GET
-     /__noexiste (404 E404). A diff here is an H/B-class ALERT with the same
-     reset re-confirmation as the battery.
-  2. Latency: ms per request (perf_counter) in the battery, contract and probes;
-     per round it reports p50/p99/max, the number of responses > 5000 ms (the
-     evaluator's threshold) and the number of 5xx, in drift.log and in
-     harness/metrics.jsonl.
-  3. Control-vs-control noise floor (--noise N): runs the battery N times at the
-     start against the same target and counts how many steps differ between runs
-     (should be 0). Noisy steps require 3 confirmations instead of 2.
-  4. Infra vs service: a response with an X-Frontier-Infra header, status
-     502/503/504 or a body containing "Application not found" is classified INFRA
-     (not a change alert; counted separately and retried after --infra-wait s).
-     Service signal = x-req.
-  5. Name probing (long round): names from harness/sondas.json + near-misses at
-     distance 1-2 from the real commands; it compares the "sugerencia" field of
-     E301 against the baseline (a new suggestion = a new hidden command) and adds
-     NOTAS;11 (arity 0) comparing the literal body. HALT is NEVER sent.
-  6. Persistent daily budget (harness/budget.json, requests to the ORIGINAL per
-     date): warning at 70% and automatic stop at 90% of 8000. Shown every round.
-     (With a local --target no original budget is consumed or persisted.)
+  - Infra vs service: X-Frontier-Infra header, 502/503/504 or "Application not
+    found" is INFRA (counted apart, retried after --infra-wait), not a change.
+  - --noise N: run the battery N times first; steps that differ between runs
+    need 3 confirmations instead of 2.
+  - Long rounds probe names from harness/sondas.json plus near-misses of the
+    real commands and compare E301 "sugerencia" with the baseline (a new
+    suggestion = a new hidden command); NOTAS;11 is compared literally. HALT is never sent.
+  - Daily budget to the ORIGINAL persisted in harness/budget.json: warn at 70%,
+    stop at 90% of 8000 (not consumed with a local --target).
 
 CLI:
-  python3 monitor.py --once                 # a single round (leaves nothing running)
+  python3 monitor.py --once                 # a single round
   python3 monitor.py --once --long          # force a long round (includes probing)
   python3 monitor.py --interval 180 --long-every 6 --rounds 0   # loop (0 = infinite)
-  python3 monitor.py --build-baseline       # (re)record commands_baseline.jsonl today
-  python3 monitor.py --noise 3 --once        # measure the noise floor (3 runs) and one round
+  python3 monitor.py --build-baseline       # (re)record commands_baseline.jsonl
+  python3 monitor.py --noise 3 --once       # noise floor (3 runs) then one round
   python3 monitor.py --target http://localhost:8191 --token lab --once
 """
 import argparse
@@ -65,13 +50,13 @@ BATTERY_FILE = os.path.join(CORPUS, "battery.jsonl")
 CMD_BASELINE = os.path.join(CORPUS, "commands_baseline.jsonl")
 SONDAS_FILE = os.path.join(HERE, "sondas.json")
 
-# Presupuesto diario contra el ORIGINAL.
+# Daily budget against the ORIGINAL.
 DAILY_CAP = 8000
 BUDGET_WARN = 0.70   # warning
 BUDGET_STOP = 0.90   # automatic stop
 
 
-# --- Infra vs service classification (#4) -----------------------------------
+# --- Infra vs service classification -----------------------------------
 def is_infra(status, headers, body):
     """True if the response is from the INFRA (not the service): X-Frontier-Infra
     header, status 502/503/504, or a body with 'Application not found'."""
@@ -90,7 +75,7 @@ def has_service_signal(headers):
     return "x-req" in {k.lower() for k in (headers or {})}
 
 
-# --- Per-round metrics (#2) ------------------------------------------------
+# --- Per-round metrics ------------------------------------------------
 class RoundMetrics:
     def __init__(self):
         self.times = []      # ms por request
@@ -124,11 +109,8 @@ class RoundMetrics:
         return round(p(0.50), 1), round(p(0.99), 1), round(s[-1], 1)
 
 
-# --- Transports (additive plane). Without --target it talks to the ORIGINAL
-# via cn.py (logged + throttled), behaviour identical to before. With
-# --target/--token it talks over httpx to a LOCAL emulator. Both measure ms and
-# (locally) expose headers, for latency and infra. They hook into an optional
-# RoundMetrics (self.metrics) that observes every request.
+# --- Transports: no --target -> ORIGINAL via cn.py (logged, throttled); --target/--token ->
+# LOCAL emulator over httpx. Both measure ms and feed the optional RoundMetrics (self.metrics).
 class OrigTransport:
     def __init__(self):
         self.metrics = None
@@ -215,7 +197,6 @@ class TargetTransport:
 
 OG = OrigTransport()
 
-# ~60 banking-domain names (es + en) for probing new commands.
 PROBE_NAMES = [
     "RETIRO", "RETIRAR", "SALDO", "SALDOS", "EXTRACTO", "MOVIMIENTOS", "HISTORIAL",
     "BLOQUEO", "BLOQUEAR", "DESBLOQUEO", "DESBLOQUEAR", "BAJA", "CIERRE", "CERRAR",
@@ -228,17 +209,14 @@ PROBE_NAMES = [
     "HISTORY",
 ]
 
-# Near-miss at distance 1-2 from the real commands (#5): a typo/variant the
-# service recognizes as "close" returns E301 with "sugerencia": <real command>,
-# which reveals commands (including hidden ones like NOTAS).
+# Near-misses (distance 1-2) of the real commands: E301 "sugerencia" reveals commands, hidden ones included.
 NEAR_MISS = [
     "RETIRA", "ABONA", "CIERRA", "BLOQUEA", "HISTORIA", "MOVIMIENTO", "CONGELA",
     "AJUSTA", "DEPOSITA", "TRANSFIERE", "CONSUL", "ANULAR", "PINGS", "ALTAS",
     "NOTA", "HALTA",
 ]
 
-# HALT is a REAL command (returns E302, not E301): it could have side effects
-# (stopping the service), so it is NEVER sent.
+# HALT is a real command (E302, not E301) that can stop the service: never sent.
 EXCLUDE_NAMES = {"HALT"}
 
 # Arity-0 probe over a known hidden command: the LITERAL BODY is compared.
@@ -246,7 +224,6 @@ NOTAS_PROBE = control.message("NOTAS")  # "NOTAS;11"
 
 REAL_COMMANDS = ["PING", "ALTA", "CONSULTA", "DEPOSITO", "TRANSFER", "ANULA"]
 
-# extra arguments to probe arity (real command -> valid args + 1 extra)
 ARITY_OVERFLOW = {
     "PING": "PING;extra",
     "ALTA": "ALTA;Lucia;Gomez",
@@ -256,8 +233,7 @@ ARITY_OVERFLOW = {
     "ANULA": "ANULA;OP-0001;extra",
 }
 
-# Contract check (#1). body => compared by compare.py (exact body);
-# error => only status + error code are compared (the "mensaje" may vary).
+# Contract check. body => compared with compare.py; error => status + error code only ("mensaje" may vary).
 CONTRACT = [
     {"name": "health+token", "method": "GET", "path": "/health",
      "noauth": False, "status": 200, "body": '{"ok":true}'},
@@ -270,12 +246,10 @@ CONTRACT = [
 ]
 
 
-# --- Presupuesto diario persistente (#6) -----------------------------------
+# --- Persistent daily budget -----------------------------------
 class DailyBudget:
-    """In-memory budget for the run (--daily-budget) + a daily
-    PERSISTENT counter of requests to the ORIGINAL in harness/budget.json. It
-    only persists and enforces the 8000/day caps when the transport is the
-    original (not local)."""
+    """Per-run budget (--daily-budget) plus the persistent daily counter in harness/budget.json;
+    the 8000/day caps apply only when the transport is the original."""
     def __init__(self, cap, transport, persist):
         self.cap = cap
         self.og = transport
@@ -418,7 +392,7 @@ def last_is_infra():
     return is_infra(lst.get("status"), lst.get("headers"), lst.get("body"))
 
 
-# --- Chequeo de contrato (#1) ----------------------------------------------
+# --- Contract check ----------------------------------------------
 def _contract_once(section):
     out = []
     for c in CONTRACT:
@@ -492,8 +466,7 @@ def _battery_diffs(expected, obs):
 
 
 def check_battery(budget, rm, noisy=None):
-    """Battery + re-confirmation. `noisy` = set of indices that require 3
-    confirmations (instead of 2) for having been marked noisy (#3)."""
+    """Battery + re-confirmation. `noisy` = step indices that need 3 confirmations instead of 2."""
     noisy = noisy or set()
     expected = load_battery_expected()
     obs = run_battery_once("monitor")
@@ -535,7 +508,7 @@ def check_battery(budget, rm, noisy=None):
                  ob["status"], ob["body"]))
 
 
-# --- Piso de ruido control-vs-control (#3) ---------------------------------
+# --- Control-vs-control noise floor ---------------------------------
 def measure_noise(n):
     """Run the battery n times and return the set of step indices that differ
     between runs (control-vs-control; should be empty)."""
@@ -572,7 +545,6 @@ def build_cmd_baseline(budget):
             sugerencias.add(sug)
         rows.append({"nombre": nm, "m": msg, "status": status, "body": body,
                      "error": err_code(body), "sugerencia": sug})
-    # arity-0 probe NOTAS;11, literal body.
     st, bd = OG.msg(NOTAS_PROBE, section="monitor-baseline-cmds")
     notas = {"nombre": "__NOTAS_ARIDAD0__", "m": NOTAS_PROBE, "status": st, "body": bd}
     with open(CMD_BASELINE, "w") as f:
@@ -640,13 +612,13 @@ def probe_new_commands(budget, rm):
         if br.get("error") == "E301" and now_err != "E301":
             drift("[probe-cmds] %s stopped returning E301 -> possible NEW command" % nm)
             drift(discovery_hint(nm))
-    # New E301 suggestions = new HIDDEN command (#5).
+    # New E301 suggestions = new HIDDEN command.
     nuevas = seen_sugs - base_sugs
     if nuevas:
         rm.alerts += 1
         drift("PROBE-CMD ALERT NEW E301 suggestion(s): %s -> new hidden command(s)"
               % sorted(nuevas))
-    # Arity-0 probe NOTAS;11, LITERAL body (#5).
+    # Arity-0 probe NOTAS;11, literal body.
     if notas_base is not None and budget.ok():
         st, bd = OG.msg(NOTAS_PROBE, section="monitor-sondeo-cmds")
         if not last_is_infra():

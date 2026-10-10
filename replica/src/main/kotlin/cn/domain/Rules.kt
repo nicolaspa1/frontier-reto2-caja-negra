@@ -1,10 +1,6 @@
 package cn.domain
 
-/**
- * Business rules, addressed by the names used in `policy.commands.<CMD>.rules` / `postRules`.
- * The names (`MontoValido`, `CuentaExiste`, ...) and the argument roles (`monto`, `origen`, ...) are policy data
- * and therefore stay in Spanish; the implementation and its documentation are in English.
- */
+/** Business rules, addressed by the names used in `policy.commands.<CMD>.rules` / `postRules` (policy data). */
 
 /** Context of a command that already passed the integrity checks (control, arity). */
 class CommandContext(val spec: CommandSpec, val args: List<String>, val ledger: Ledger, val policy: Policy) {
@@ -28,8 +24,7 @@ object RuleRegistry {
     private val amountRegex = Regex("^[1-9][0-9]*$")
 
     val rules: Map<String, Rule> = mapOf(
-        // Positive integer with no leading zeros, within [amountMin, amountMax]. L44-L47, L53, L61.
-        // toLongOrNull guards against values beyond Long.MAX (they are above any amountMax anyway).
+        // Positive integer, no leading zeros, within [amountMin, amountMax]. L44-L47, L53, L61
         "MontoValido" to Rule { ctx ->
             val raw = ctx.arg("monto") ?: return@Rule null
             if (!amountRegex.matches(raw)) return@Rule "E303"
@@ -46,8 +41,7 @@ object RuleRegistry {
             val acc = ctx.arg("origen")?.let(ctx.ledger::account) ?: return@Rule null
             if (acc.strikes >= ctx.policy.limits.blockAfterFailures) "E510" else null
         },
-        // Per-operation transfer cap, inclusive (L68-L71). Exempt when origin and destination belong to the same
-        // holder name, compared as exact text (L2301: Lucia->Lucia 100001 OK; L2320: Lucia->lucia E506).
+        // Per-operation cap, inclusive (L68-L71); same holder name (exact text) is exempt (L2301 OK, L2320 E506).
         "LimitePorOperacion" to Rule { ctx ->
             if (ctx.policy.limits.transferMaxSameOwnerExempt) {
                 val o = ctx.arg("origen")?.let(ctx.ledger::account)
@@ -84,8 +78,7 @@ object RuleRegistry {
         "DesbloqueoTrasExito" to PostRule { ctx, _ ->
             if (ctx.policy.limits.resetStrikesOnSuccess) ctx.arg("origen")?.let(ctx.ledger::account)?.let { it.strikes = 0; it.blockedAttempts = 0 }
         },
-        // A successful DEPOSITO on an account clears its failure counter (and therefore its block). Deposits on
-        // other accounts, CONSULTA, incoming transfers, invalid deposits and ANULA do not (L3663-L3731).
+        // A successful DEPOSITO on the account clears its strikes; nothing else does (L3663-L3731).
         "DesbloqueoTrasDeposito" to PostRule { ctx, _ ->
             ctx.arg("cuenta")?.let(ctx.ledger::account)?.let { it.strikes = 0; it.blockedAttempts = 0 }
         },

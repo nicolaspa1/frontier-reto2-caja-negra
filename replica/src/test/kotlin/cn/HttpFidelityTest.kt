@@ -30,8 +30,7 @@ class HttpFidelityTest {
         return try {
             client.send(b.build(), HttpResponse.BodyHandlers.ofString(Charsets.UTF_8))
         } catch (e: java.io.IOException) {
-            // Keep-alive race: the pooled connection was closed by the server between two requests.
-            // A real client simply reconnects; retry once on a fresh connection and report where it happened.
+            // keep-alive race (server closed the pooled connection): retry once on a fresh connection
             println("[http-fidelity] reconnect at L${l.n} after ${e.message}")
             TestSupport.newClient().send(b.build(), HttpResponse.BodyHandlers.ofString(Charsets.UTF_8))
         }

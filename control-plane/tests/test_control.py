@@ -1,14 +1,6 @@
-"""Tests for the control-digit algorithm (experiments/control.py).
-
-The 20 official examples in tests/fixtures/official-examples.jsonl must all be
-consistent with control.control / control.message:
-
-  * E201 (malformed control): the control segment is NOT a 1-2 digit number.
-  * E202 (invalid control value): the segment is well formed but does not
-    equal the control computed for the payload.
-  * PING: exempt, the service does not validate the control value.
-  * anything else (2xx or a later business error): the control was accepted,
-    so control.control(payload) must equal the segment.
+"""The 20 official examples (tests/fixtures/official-examples.jsonl) must be consistent with
+control.control / control.message: E201 = not a 1-2 digit control, E202 = well formed but
+wrong value, PING = exempt, anything else = the computed control equals the segment.
 """
 import json
 import os

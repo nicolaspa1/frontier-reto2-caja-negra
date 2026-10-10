@@ -1,10 +1,4 @@
-"""Shared pytest fixtures and import-path setup for the harness test suite.
-
-The harness modules live in ``harness/`` and ``experiments/`` and import each
-other by bare module name (``import compare``, ``import cn`` ...). We add both
-directories to ``sys.path`` so the tests can import them the same way the
-scripts do when run from their own folder.
-"""
+"""Import-path setup: harness/ and experiments/ import each other by bare module name."""
 import os
 import sys
 

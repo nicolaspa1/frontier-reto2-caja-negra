@@ -1,41 +1,23 @@
 #!/usr/bin/env python3
-"""Convert experiments/log.jsonl into the official `experimentos.jsonl` format.
+"""Convert experiments/log.jsonl into the official spec/experimentos.jsonl format.
 
-Official format from the challenge statement: one line per request to the original with
+One line per request to the original:
   {id, seq, x_req, hipotesis, request, status, response, conclusion}
-where:
-  - id        = line number of the export, unique. It equals the position of the
-                record in experiments/log.jsonl (1-based). The log's own `n`
-                counter collided 6 times when two clients appended concurrently
-                (n 6772, 6784, 6790, 6808, 6810, 6824 appear twice), so `n` is
-                NOT used as id; genspec.py cites lines by the same position, so
-                every `Lnn` of the spec is the `id` of the export.
-  - seq       = the log section (the `section` field).
-  - x_req     = the X-Req header of the response (number when numeric, else
-                the raw string, null when the response carried none).
-  - hipotesis = a readable sentence for the section, taken from the editable
-                map harness/hipotesis.json (one sentence per section). If the
-                section is missing, a proposal is added to the map; a map entry
-                that is just the section name (boilerplate) is replaced by the
-                proposal as well.
-  - request   = the body sent to the original, exactly as the README shows it
-                ({"m": ...} for /msg). Raw string bodies that are valid JSON are
-                parsed; anything else (/__reset, /health, other routes, bodies
-                that are not JSON) is described as {"metodo","ruta"} (+ "body"
-                when one was sent). No extra keys are injected: the credential
-                used, when it was not the valid token, is stated in `conclusion`.
-  - status    = HTTP status of the original (0 = no response, network error).
-  - response  = the original's body parsed as JSON (if it was) or string.
-  - conclusion= short sentence derived from status/response ("200 pong",
-                "422 E506 límite excedido", ...), plus the credential used when
-                it was not the valid token.
+  - id        = position in experiments/log.jsonl (1-based). The log's own `n`
+                collided 6 times under concurrent appends, so it is not used;
+                genspec.py cites the same positions, so every `Lnn` is an `id`.
+  - seq       = the log `section`.
+  - x_req     = response X-Req header (number when numeric, else raw, null when absent).
+  - hipotesis = one sentence per section from harness/hipotesis.json (editable;
+                missing or boilerplate entries are replaced by a proposal).
+  - request   = the body sent, as the README shows it ({"m": ...} for /msg); other
+                requests are described as {"metodo","ruta"} (+ "body"). The
+                credential used, when not the valid token, goes to `conclusion`.
+  - status    = HTTP status (0 = network error).
+  - response  = body parsed as JSON when possible, else string.
+  - conclusion= short sentence derived from status/response.
 
-Writes spec/experimentos.jsonl and (re)generates/updates harness/hipotesis.json.
-
-NOTE: the output field names (hipotesis, request, metodo, ruta, ...) and every
-hypothesis sentence below are kept in Spanish on purpose: they are the official
-deliverable format and the content of hipotesis.json / experimentos.jsonl, which
-must stay byte-compatible.
+Field names and hypothesis sentences are the deliverable's content (frozen).
 
 CLI:
   python3 export_log.py                 # generate spec/experimentos.jsonl
@@ -126,8 +108,7 @@ _FUZZ_PROBE_RE = re.compile(r"^fuzz-b(\d+)-probe:(.*)$")
 
 
 def generic_proposal(s):
-    """Sentence for harness sections (single:/seq-*/replay:/fuzz-b*/rerecord:)
-    with no map entry."""
+    """Sentence for harness sections (single:/seq-*/replay:/fuzz-b*/rerecord:) with no map entry."""
     if s.startswith("single:"):
         return s[len("single:"):]
     if s.startswith("seq-short:gen "):
@@ -177,9 +158,7 @@ def load_map():
 
 
 def ensure_map(sections):
-    """Load the map, add missing sections and replace boilerplate entries
-    (sentence == section name) by the proposal. Hand-edited sentences are
-    kept."""
+    """Load the map, add missing sections, replace boilerplate entries (sentence == section name); keep hand-edited ones."""
     m = load_map()
     changed = False
     for s in sections:
@@ -194,9 +173,8 @@ def ensure_map(sections):
 
 
 def request_of(req):
-    """Derive the official `request` field from the log's req: the body sent,
-    as the README shows it ({"m": ...}). A raw string body that is valid JSON
-    is parsed; everything else is described with metodo/ruta (+ body)."""
+    """Official `request` field: the body sent ({"m": ...}); a raw body that is valid JSON is
+    parsed, anything else is described with metodo/ruta (+ body)."""
     body = req.get("body")
     path = req.get("path")
     method = req.get("method")

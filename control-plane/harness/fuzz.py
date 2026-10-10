@@ -176,7 +176,6 @@ def gen_single(rng):
         return M(f"HALT;{a}"), f"HALT one arg {a!r}"
     if kind == "notas":
         return rng.choice(["NOTAS;11", "notas;11", "NOTAS;XX", "NOTAS;1", "NOTAS", "NOTAS;"]), "NOTAS variants"
-    # misc
     return rng.choice([";", ";;", ";64", "PING;64;", "64", "PING;;64", "PING; 64", " ;64", " PING;64", "PING;６４",
                        "ＰＩＮＧ;64", "PING;64\n", "P;64", "A;Lucia;82", ";;;", "CONSULTA;AC-0001;14;", "PING;64;64;64"]), "misc"
 

@@ -1,11 +1,5 @@
-"""Run the built-in self-tests of the offline tools as subprocesses.
-
-These invoke the real CLIs the same way an operator would:
-  * fit.py --selftest       (regression of the control-algorithm search)
-  * templates.py --selftest (synthetic-log diff/patch regression)
-
-(genspec.py --check is covered by test_genspec.py, which runs it read-only
-against a frozen snapshot of the log so the live monitor cannot make it flaky.)
+"""Run fit.py --selftest and templates.py --selftest as subprocesses, the way an operator would.
+(genspec.py --check is covered read-only by test_genspec.py.)
 """
 import os
 import subprocess

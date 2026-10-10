@@ -13,7 +13,6 @@ import io.vertx.core.Vertx
  */
 fun main() {
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
-    // "ftr_PENDIENTE" is the documented placeholder token; a real deployment always sets TEAM_TOKEN.
     val token = System.getenv("TEAM_TOKEN") ?: "ftr_PENDIENTE".also { System.err.println("WARN: TEAM_TOKEN is not set, using placeholder $it") }
     val healthInternal = !System.getenv("HEALTH_INTERNAL").isNullOrBlank()
     val healthPath = System.getenv("HEALTH_PATH")?.takeIf { it.isNotBlank() } ?: HttpVerticle.DEFAULT_HEALTH_PATH

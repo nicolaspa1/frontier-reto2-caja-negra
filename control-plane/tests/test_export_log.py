@@ -53,13 +53,11 @@ def test_export_produces_official_format(tmp_path, monkeypatch):
     for row in rows:
         assert set(row.keys()) == expected_keys
 
-    # /msg request keeps the sent body verbatim
     assert rows[0]["request"] == {"m": "PING;64"}
     assert rows[0]["status"] == 200
     assert rows[0]["response"] == {"pong": True}
     assert rows[0]["x_req"] == "abc123"
 
-    # /__reset and raw requests are described with metodo/ruta
     assert rows[1]["request"] == {"metodo": "POST", "ruta": "/__reset"}
 
     # the official `request` is only the body sent: no injected "auth" key

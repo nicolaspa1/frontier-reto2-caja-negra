@@ -1,22 +1,14 @@
 #!/usr/bin/env python3
-"""Shared LABORATORY (control plane) utilities for Challenge 2.
+"""Shared laboratory utilities: every request to the ORIGINAL goes through experiments/cn.py
+(logged in experiments/log.jsonl) and is throttled below 8 req/s.
 
-Re-exports the client+logger `cn` and the control helper `control` from
-`experiments/`, so that EVERY request to the ORIGINAL service is appended to
-`experiments/log.jsonl`. It adds:
+- og_reset(section) / og_msg(m, section) / og_raw(method, path, body, section, token=cn.TOK)
+  -> (status, body_str); token=None sends no Authorization (contract check).
+- log_count(): log lines so far (requests_spent = final - initial).
+- BATTERY / battery_messages(): the monitor's 27-step battery, each step tagged with its rule.
+- PROBE_COMMANDS: candidate names for the monitor's probing.
 
-- `throttle()`: keeps traffic to the original below 8 req/s.
-- `og_reset(section)` / `og_msg(m, section)`: reset and /msg against the
-  original (via cn, logged and throttled). They return (status, body_str).
-- `og_raw(method, path, raw_body, section, token=cn.TOK)`: raw request against
-  the original; `token=None` sends it without Authorization (contract check).
-- `log_count()`: number of log lines (acts as a budget counter;
-  requests_spent = log_count_final - log_count_initial).
-- `BATTERY` and `battery_messages()`: the monitor's 27-step battery, each step
-  tagged with the rule it exercises.
-- `PROBE_COMMANDS`: candidate commands for the monitor's probing.
-
-No CLI; this is a library imported by record/replay/monitor.
+Library only (imported by record/replay/monitor).
 """
 import os
 import sys
@@ -54,9 +46,7 @@ def og_msg(m, section=""):
 
 
 def og_raw(method, path, raw_body=None, section="", token=cn.TOK):
-    """Raw request against the original. `token` defaults to the team token
-    (behaviour identical to before); `token=None` sends it WITHOUT
-    Authorization (used by the contract check: /health without token -> 401)."""
+    """Raw request against the original; token=None sends it without Authorization (contract check)."""
     throttle()
     return cn.call(method, path, raw_body=raw_body, section=section, token=token)
 
@@ -69,11 +59,8 @@ def log_count():
         return 0
 
 
-# --- Monitor battery (27 steps after reset; control computed with control.py).
-# Each entry: (kind, payload, rule). kind="full" => literal message (includes its
-# control as-is); kind="ctrl" => the control is computed with control.message().
-# The `rule` strings are kept in Spanish on purpose: they are written verbatim
-# as the "rule" field of corpus/battery.jsonl and must stay byte-compatible.
+# --- Monitor battery (27 steps after reset): (kind, payload, rule). kind="full" = literal message,
+# kind="ctrl" = control computed with control.message(). `rule` is written verbatim to corpus/battery.jsonl.
 BATTERY = [
     ("full", "PING;64", "R-PING-ok: PING responde pong con control válido"),
     ("full", "PING;XX", "R-PING-ignora-control: PING no valida el valor del control"),

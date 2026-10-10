@@ -1,49 +1,25 @@
 #!/usr/bin/env python3
-"""Generate spec/especificacion.md (7 sections of the official README).
+"""Generate spec/especificacion.md (the 7 sections of the official README).
 
-Each behavior is emitted in an `ID | Comportamiento | Evidencia | Confianza`
-table. The evidence is Lnn lines of the experiment log
-(experiments/log.jsonl == spec/experimentos.jsonl, same `id`). There are two
-modes:
+Each behavior is a row `ID | Comportamiento | Evidencia | Confianza`; evidence is
+Lnn = position in experiments/log.jsonl (1-based, == `id` of spec/experimentos.jsonl;
+the log's own `n` counter collided 6 times and is not used). A fact with explicit
+`lines` has each citation verified by content under --check; without `lines` the
+matchers search the whole log (max 5 citations). Confidence: confirmado (>= 2
+verified lines), probable (1, or forced), supuesto (none, assume=True).
 
-  - explicit `lines`: the behavior cites exactly those lines. Under `--check`
-    each one is VERIFIED BY CONTENT against the log (it must exist and match one
-    of the behavior's matchers); a citation that does not match fails the check
-    and is excluded from the document.
-  - without `lines`: they are searched by matchers across the whole log (max 5
-    citations).
+Prose blocks (control computation, per-command examples, pipeline, stateful
+sequences) are generated from the log and checked against it. --check also
+verifies the battery re-runs (L198-L224): v1 re-runs identical to the baseline,
+v2 re-runs differ in the same steps and agree among themselves (CHG-0a/CHG-0b).
 
-Confidence = number of verified observations, unless explicitly overridden:
-  - confirmado  >= 2 lines that exhibit it
-  - probable    exactly 1, or `conf='probable'` (inferred / not separable by
-                log content even if there are citations)
-  - supuesto    none (default replacement behavior, assume=True)
-
-Besides the tables, the document carries prose blocks generated FROM THE LOG
-(not by hand): the step-by-step control computation (recomputed and checked
-against the official examples), a literal request/response example per command,
-the single validation pipeline and the stateful sequences of the Memoria
-section. `--check` also verifies the battery re-runs (27 steps, L198-L224)
-detected in the log: the ones recorded against version 1 (before V2_FROM) must
-be identical to the baseline in status and body, and the ones recorded against
-version 2 must differ from the baseline in the same steps and be identical among
-themselves (Cambios section, CHG-0a/CHG-0b).
-
-Lines are cited by POSITION in experiments/log.jsonl (1-based), which is the
-`id` of spec/experimentos.jsonl (see export_log.py); the log's own `n` counter
-is not used because it collided 6 times.
-
-NOTE: this tool writes the Spanish deliverable spec/especificacion.md. All the
-behavior descriptions, section titles and prose strings below are the document
-content and are kept in Spanish on purpose so the file stays byte-compatible;
-only comments, docstrings and [genspec] console messages are in English.
+Behavior descriptions, titles and prose strings are the deliverable's content
+(Spanish); only comments and [genspec] console messages are code.
 
 CLI:
   python3 genspec.py                 # writes spec/especificacion.md
-  python3 genspec.py --check         # exit 1 if a citation is not verified,
-                                     # a non-'supuesto' behavior is left without
-                                     # evidence, or a prose block does not match
-                                     # the log
+  python3 genspec.py --check         # exit 1 on an unverified citation, a non-supuesto
+                                     # fact without evidence, or a prose block mismatch
   python3 genspec.py --out PATH
 """
 import argparse
@@ -73,8 +49,7 @@ SECTIONS = [
      "cerrarlos."),
 ]
 
-# Order of the Comandos section blocks (ID = CMD-<BLOCK>-n) and log lines from
-# which the literal request/response example is taken.
+# Comandos section blocks (ID = CMD-<BLOCK>-n) and the log lines of their literal example.
 CMD_BLOCKS = [
     ("PING", "`PING;<control>` — aridad 0, sin efecto.", [2]),
     ("ALTA", "`ALTA;<nombre>;<control>` — aridad 1, crea una cuenta.", [4]),
@@ -99,21 +74,13 @@ MEM_SEQUENCES = [
     ("Fallos que NO cuentan como strike: E401 entre dos E506 (MEM-6b)", 211, 217),
 ]
 
-# Reference battery (L197 = reset, L198-L224 = 27 steps). Each re-run (the same
-# 27 requests after a reset) is detected in the log and must be identical step
-# by step in status and body.
+# Reference battery: L197 = reset, L198-L224 = 27 steps; re-runs are detected and compared step by step.
 BATTERY_BASE = (197, 224)
 
-# 15:30 incident: fill in when it happens. Each entry is emitted as a row of
-# section 6. While empty, a visible note is emitted.
-#   ("CHG-INC-1", "<what changed>: ...", ["L..."], "confirmado|probable")
-#   ("CHG-INC-2", "<since when>: ...", [...], ...)
-#   ("CHG-INC-3", "<how it was detected>: ...", [...], ...)
-#   ("CHG-INC-4", "<how the replacement adapted>: ...", [...], ...)
 V2_FROM = 5555  # first log line recorded against version 2 of the original
 
+# Section 6 rows: (id, text, citations, confidence). `{TS:n}` / `{TS5:n}` become the HH:MM:SS / HH:MM of log line n.
 INCIDENTE = [
-    # `{TS:n}` / `{TS5:n}` are replaced in main() by the HH:MM:SS / HH:MM of log line n.
     ("CHG-INC-1", "Qué cambió (1/3): el límite por transferencia bajó de 100000 a 50000, inclusivo: `TRANSFER;AC-0001;AC-0002;50000` -> 200 (L5760, L5821) y 50001 (L5820), 99999 (L5759) o 100000 (L5559, L5560, L5561; L5712 en la batería) -> 422 E506. Bisección sobre estado limpio en la sección `incidente-bisect` (74999, 62499 y 56249 -> E506, L5801–L5803). En v1, 100000 -> 200 (L68, L11; CMD-TRANSFER-2).", ["L5760", "L5821", "L5820", "L5759", "L5559", "L5560", "L5561", "L5712", "L5801", "L5802", "L5803"], "confirmado"),
     ("CHG-INC-2", "Qué cambió (2/3): `CONSULTA` devuelve el saldo como CADENA con dos decimales, siendo la unidad la centésima del monto almacenado: 22 depósitos de 1 -> `\"saldo\":\"0.22\"` (L5605); depósito de 1000000 -> `\"10000.00\"` (L5565); cuenta sin movimientos -> `\"0.00\"` (L5566, L5580, L5706); 2 x 9999999999 -> `\"199999999.98\"` (L5612); 150 depositados menos 100 transferidos -> `\"0.50\"` (L5778); saldo negativo tras ANULA -> `\"-1.00\"` (L5780). En v1 era un entero (`\"saldo\":0` en L205 frente a `\"0.00\"` en L5706, mismo paso de la batería; CMD-CONSULTA-1).", ["L5605", "L5565", "L5566", "L5580", "L5706", "L5612", "L5778", "L5780", "L205"], "confirmado"),
     ("CHG-INC-3", "Qué cambió (3/3): la cuenta bloqueada responde 423 (antes 409) y el cuerpo añade `intentos`, el número de intentos rechazados desde el bloqueo: `{\"error\":\"E510\",\"mensaje\":\"cuenta bloqueada\",\"intentos\":1}`, luego 2, 3 (L5562, L5563, L5564; L5660, L5717) y hasta 12 observados (L5804–L5815). El umbral sigue siendo 3 fallos E506/E507 consecutivos como origen y una TRANSFER exitosa sigue reiniciando los strikes (L5674, L5675 dos E507; L5676 depósito; L5677 -> 200; L5678–L5680 tres E507; L5681 -> 423 intentos 1). El desbloqueo por depósito a la cuenta bloqueada (CMD-TRANSFER-12) se mantiene y reinicia `intentos`: E507 x3 (L5785–L5787) -> 423 intentos 1, 2 (L5788, L5789); `DEPOSITO;AC-0001;5` (L5790) -> las transferencias vuelven a evaluarse (E507 en L5791–L5793) y el nuevo bloqueo empieza otra vez en intentos 1 (L5794) y 2 (L5796).", ["L5562", "L5563", "L5564", "L5660", "L5717", "L5804", "L5815", "L5674", "L5677", "L5681", "L5788", "L5789", "L5790", "L5791", "L5794", "L5796"], "confirmado"),
@@ -1443,9 +1410,7 @@ FACTS = [
 ]
 
 
-# ----------------------------------------------------------------------------
-# Log
-# ----------------------------------------------------------------------------
+# --- Log
 def load_log():
     """Load the log. Lines are cited by POSITION (1-based line number), which is
     also the `id` of spec/experimentos.jsonl (export_log.py). The log's own `n`
@@ -1538,9 +1503,7 @@ def confidence(n):
     return "supuesto"
 
 
-# ----------------------------------------------------------------------------
-# Prose blocks generated from the log
-# ----------------------------------------------------------------------------
+# --- Prose blocks generated from the log
 def req_text(row):
     """Literal request as it was sent (compact JSON body or description)."""
     req = row["req"]
@@ -1787,8 +1750,7 @@ def check_sugerencias(rows):
             continue
         # The original folds case ASCII-only (INT-13): a Unicode upper() would turn "pıng" into "PING".
         name = "".join(ch.upper() if "a" <= ch <= "z" else ch for ch in rb["m"].split(";")[0])
-        # nearest candidate by distance; tie -> first in list order
-        # (rule observed at L1318 and L1623: ALTA beats HALT)
+        # nearest candidate; ties -> first in list order (L1318, L1623: ALTA beats HALT)
         ds = [(lev(name, c), i, c) for i, c in enumerate(SUGERENCIA_CANDIDATOS)]
         best = min(ds)
         expected = best[2] if best[0] <= 2 else None
@@ -1866,9 +1828,7 @@ def sondeo_v2_stats(rows):
     return n, bad
 
 
-# ----------------------------------------------------------------------------
-# main
-# ----------------------------------------------------------------------------
+# --- main
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1882,7 +1842,6 @@ def main():
     n_e301, sug_problems = check_sugerencias(rows)
     status0 = [row["n"] for row in rows if row["res"].get("status") == 0]
 
-    # resolve evidence and confidence
     resolved = []
     missing = []
     bad_cites = []
@@ -1928,7 +1887,6 @@ def main():
         if total == 0 and not assume and not conf_override:
             missing.append(fid)
 
-    # incident (section 6)
     for fid, comp, lines, conf in INCIDENTE:
         for ln in lines:  # cited lines must exist in the log
             if byn.get(int(ln[1:])) is None:
@@ -1937,14 +1895,12 @@ def main():
         ev = ", ".join(lines) if lines else "—"
         resolved.append(("Cambios durante el día", fid, comp, ev, conf, len(lines), False))
 
-    # prose blocks (validated against the log)
     prose_problems = []
     ctrl_lines, ctrl_problems = control_prose(byn)
     prose_problems += ctrl_problems
     prose_problems += battery_problems
     prose_problems += sug_problems
 
-    # write the document
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     last_hhmm, last_n, first_hhmm = last_log_ts(rows)
     L = []

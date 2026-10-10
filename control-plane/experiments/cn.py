@@ -30,9 +30,7 @@ def call(method, path, body=None, headers=None, section="", raw_body=None, token
     n=nextn()
     logged_body = raw_body if raw_body is not None else body
     if isinstance(logged_body,str) and len(logged_body)>2000:
-        # NOTE: this placeholder string is kept in Spanish on purpose: it is
-        # already written verbatim in log.jsonl/experimentos.jsonl and must stay
-        # byte-compatible with those frozen files.
+        # placeholder wording already present verbatim in log.jsonl; frozen
         logged_body = f"<cuerpo sintetico de {len(logged_body.encode())} bytes: {logged_body[:40]}...>"
     rec={"n":n,"ts":time.strftime("%H:%M:%S"),"section":section,"req":{"method":method,"path":path,"body":logged_body,"body_bytes":len(data) if data else 0,"headers":{k:v for k,v in h.items() if k!="Authorization"},"auth_kind":("none" if "Authorization" not in h else ("valid" if h["Authorization"]==f"Bearer {TOK}" else ("foreign-token" if h["Authorization"].startswith("Bearer ") else ("lowercase-bearer" if h["Authorization"].lower().startswith("bearer ") else "no-scheme"))))},"res":{"status":status,"body":rb,"content_type":rh.get("content-type") or rh.get("Content-Type"),"x_req":rh.get("x-req") or rh.get("X-Req")},"ms":ms}
     with open(LOG,"a") as f: f.write(json.dumps(rec,ensure_ascii=False)+"\n")

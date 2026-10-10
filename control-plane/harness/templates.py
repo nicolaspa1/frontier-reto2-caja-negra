@@ -1,45 +1,22 @@
 #!/usr/bin/env python3
-"""RESPONSE TEMPLATE re-extractor - Challenge 2 "The black box".
+"""Response-template re-extractor: rebuilds responses/errors templates from the log.
 
-Does NOT call the original service. It works only with the recorded log
-(`experiments/log.jsonl`) and with the templates of a policy
-(`rules/policy-v1.json`, `responses`/`errors` blocks).
+Offline: reads experiments/log.jsonl and a policy's responses/errors blocks.
+Each observed response belongs to a slot identified by its structural signature
+(status, set of JSON paths, error code); paths whose value varies across
+instances become ${placeholders} (reusing policy-v1 names when known), the rest
+are constants. The signature survives value renamings and separates bare E301
+from E301+sugerencia, ANULA from ANULA_REPETIDA, etc.
 
-Idea:
-  - Each observed response belongs to a "slot": for errors, the code
-    (E301, E401, ...); for successes, the body shape. Two instances of the same
-    slot share status and the SAME set of paths; only the values of some paths
-    change = variables. The remaining paths are constants.
-  - The slot is identified by its structural SIGNATURE
-        (status, set-of-paths, error-code-if-any)
-    which is stable against value renamings (RF4) and distinguishes bare E301
-    from E301+sugerencia, ANULA from ANULA_REPETIDA, etc.
-  - For each slot a template is emitted with named placeholders, using the names
-    already used by policy-v1 (${cuentaId}, ${saldo}, ${operacionId},
-    ${sugerencia}) when the path matches a known variable.
+Output file names and fields are frozen (byte-compared downstream).
 
-Subcommands:
-  extract  --log L [--from N] [--to M]
-      Group, detect variables/constants and write
-      harness/templates-extracted.json.
-  diff     --against policy.json [--log L] [--from N] [--to M]
-      Compare what was extracted with the policy templates: equal, different
-      (with text diff), new (slot without a template) and orphan (template with
-      no observation in the range).
-  patch    --against policy.json --out out.json [--log L] [--from N] [--to M]
-      Copy the policy with responses/errors updated from the log (only those two
-      blocks), evidencia = lines used. Unknown variable ->
-      "supuesto":"valor variable no reproducible" + last observed value.
-  --selftest
-      Synthetic log (recieved->received and E301 without a trailing space from
-      line N onward); verifies that diff detects exactly those 2 differences and
-      that patch produces the correct policy.
-
-NOTE: the templates-extracted.json / patched-policy field names (fuente, rango,
-plantillas, comandos, observaciones, ejemplos, variables_desconocidas, conocida,
-patron, ultimo, evidencia, supuesto, ...) and the service-matching byte strings
-('comando desconocido', 'recieved'/'received') are kept in Spanish on purpose so
-the output files and the evaluator's byte comparison stay compatible.
+  python3 templates.py extract --log L [--from N] [--to M]        # -> harness/templates-extracted.json
+  python3 templates.py diff    --against policy.json [--log L] [--from N] [--to M]
+      equal / different (text diff) / new slot / orphan template
+  python3 templates.py patch   --against policy.json --out out.json [--log L] [--from N] [--to M]
+      policy copy with responses/errors replaced from the log, evidencia = lines used;
+      unknown variable -> "supuesto" + last observed value
+  python3 templates.py --selftest
 """
 import argparse
 import copy
@@ -66,9 +43,7 @@ SENT_STR = "\u0000VARSTR\u0000"   # placeholder that was quoted
 SENT_BARE = "\u0000VARBARE\u0000"  # "bare" placeholder (number/boolean)
 
 
-# --------------------------------------------------------------------------- #
-# Aplanado de cuerpos JSON a rutas  (a.b[0].c -> valor)
-# --------------------------------------------------------------------------- #
+# --- Flatten JSON bodies to paths (a.b[0].c -> value)
 def flatten(obj, prefix=""):
     out = {}
     if isinstance(obj, dict):
@@ -82,9 +57,7 @@ def flatten(obj, prefix=""):
     return out
 
 
-# --------------------------------------------------------------------------- #
-# Catalog of known variables (names already used by policy-v1)
-# --------------------------------------------------------------------------- #
+# --- Catalog of known variables (names already used by policy-v1)
 # Each entry: (name, test(values) -> bool, pattern). The first one that matches
 # ALL observed values of the path wins.
 def _all(values, pred):
@@ -99,10 +72,8 @@ def eval_str(v):
 _RE_AC = re.compile(r"^AC-\d+$")
 _RE_OP = re.compile(r"^OP-\d+$")
 
-# The pattern labels ("entero", "texto", "AC-dddd", ...) are written to the
-# "patron" field of templates-extracted.json, so they stay in Spanish.
+# (name, predicate over one value, label written verbatim to the "patron" field)
 KNOWN_VARS = [
-    # (name, predicate-over-one-value, pattern-label)
     ("cuentaId", lambda v: isinstance(v, str) and _RE_AC.match(v), "AC-dddd"),
     ("operacionId", lambda v: isinstance(v, str) and _RE_OP.match(v), "OP-dddd"),
     ("saldo", lambda v: isinstance(v, bool) is False and isinstance(v, int), "entero"),
@@ -121,7 +92,6 @@ PATH_HINTS = {
 
 
 def leaf_name(path):
-    # last segment, without the array index
     seg = re.split(r"[.\[]", path)[-1].rstrip("]")
     return seg
 
@@ -149,17 +119,13 @@ def resolve_var_name(path, values, policy_name=None):
     leaf = leaf_name(path)
     if leaf in PATH_HINTS:
         return PATH_HINTS[leaf], True
-    # by values
     for name, pred, _ in KNOWN_VARS[:3]:  # cuentaId / operacionId / saldo
         if _all(values, pred):
             return name, True
-    # unknown: use the leaf name as a tentative placeholder
     return leaf or "var", False
 
 
-# --------------------------------------------------------------------------- #
-# Reading the log
-# --------------------------------------------------------------------------- #
+# --- Reading the log
 def load_log(path, frm=None, to=None):
     recs = []
     with open(path, encoding="utf-8") as f:
@@ -182,7 +148,6 @@ def load_log(path, frm=None, to=None):
             except (ValueError, TypeError):
                 parsed = None
                 is_json = False
-            # command (informational): first segment of req.body.m
             cmd = None
             req = o.get("req", {})
             rb = req.get("body")
@@ -197,9 +162,7 @@ def load_log(path, frm=None, to=None):
     return recs
 
 
-# --------------------------------------------------------------------------- #
-# Firma de un slot
-# --------------------------------------------------------------------------- #
+# --- Slot signature
 def signature(rec):
     if not rec["is_json"] or not isinstance(rec["parsed"], dict):
         # non-JSON (or non-object) body: the exact text IS the signature
@@ -210,13 +173,10 @@ def signature(rec):
     return (rec["status"], tuple(sorted(fl.keys())), code)
 
 
-# --------------------------------------------------------------------------- #
-# Signature of a policy template (string with ${...})
-# --------------------------------------------------------------------------- #
+# --- Signature of a policy template (string with ${...})
 def template_to_sentinels(body):
     """Replace placeholders with sentinels and return a parseable JSON string."""
-    # quoted ones first, then bare ones. We use replacement functions so that
-    # re does not interpret the JSON escape sequences.
+    # replacement functions keep re from interpreting JSON escapes
     quoted = json.dumps(SENT_STR)
     bare = json.dumps(SENT_BARE)
     s = re.sub(r'"\$\{[^}]+\}"', lambda m: quoted, body)
@@ -250,9 +210,7 @@ def policy_index(policy):
     return idx
 
 
-# --------------------------------------------------------------------------- #
-# Template serialization (compact, like policy-v1)
-# --------------------------------------------------------------------------- #
+# --- Template serialization (compact, like policy-v1)
 def serialize(obj, placeholders, literals, path=""):
     """obj: representative (last observed). placeholders: path->(name,was_str)
     for variables emitted as ${name}. literals: paths left with their literal
@@ -275,9 +233,7 @@ def serialize(obj, placeholders, literals, path=""):
     return json.dumps(obj, ensure_ascii=False)
 
 
-# --------------------------------------------------------------------------- #
-# Template extraction from the log
-# --------------------------------------------------------------------------- #
+# --- Template extraction from the log
 def extract(recs, policy=None):
     """Group recs by signature and produce a dict of templates.
 
@@ -299,7 +255,6 @@ def extract(recs, policy=None):
         status = members[0]["status"]
         is_text = (len(sig) == 2 and sig[1][0] == "__TEXT__")
         matched = pidx.get(sig)
-        # slot name
         if matched:
             section, key = matched[0], matched[1]
             name = key
@@ -323,7 +278,6 @@ def extract(recs, policy=None):
             }
             continue
 
-        # flatten all members
         flats = [flatten(m["parsed"]) for m in members]
         all_paths = sorted({p for fl in flats for p in fl.keys()})
         # placeholders of the matching policy, by path
@@ -359,7 +313,6 @@ def extract(recs, policy=None):
                                     "was_str": was_str}
                     placeholders[p] = (pol_name, was_str)
                     placeholders_patch[p] = (pol_name, was_str)
-                # otherwise it is a constant
 
         rep = copy.deepcopy(members[-1]["parsed"])  # last observed
         body = serialize(rep, placeholders, set())
@@ -416,9 +369,7 @@ def _synth_name(members, status, sig, used):
     return name
 
 
-# --------------------------------------------------------------------------- #
-# Canonical form of a template (to compare extracted vs policy)
-# --------------------------------------------------------------------------- #
+# --- Canonical form of a template (to compare extracted vs policy)
 def canonical(body):
     try:
         return ("json", json.loads(template_to_sentinels(body)))
@@ -440,9 +391,7 @@ def text_diff(a, b):
         [a], [b], fromfile="policy", tofile="log", lineterm=""))
 
 
-# --------------------------------------------------------------------------- #
-# Comandos
-# --------------------------------------------------------------------------- #
+# --- Commands
 def cmd_extract(args):
     recs = load_log(args.log, args.frm, args.to)
     policy = _maybe_load_policy(args)
@@ -477,10 +426,8 @@ def cmd_extract(args):
 def compute_diff(recs, policy):
     templates = extract(recs, policy)
     pidx = policy_index(policy)
-    # signature -> (section,key) of the policy
     sig2pol = {sig: (sec, key) for sig, (sec, key, _, _) in pidx.items()}
 
-    # signature -> extracted template
     sig2tpl = {}
     for name, t in templates.items():
         # recompute the template signature from an example
@@ -599,9 +546,7 @@ def _maybe_load_policy(args):
     return None
 
 
-# --------------------------------------------------------------------------- #
-# Selftest
-# --------------------------------------------------------------------------- #
+# --- Selftest
 def build_synthetic_log(path, policy, n_split):
     """Write a synthetic log.
 
@@ -629,7 +574,6 @@ def build_synthetic_log(path, policy, n_split):
     add(200, '{"cuenta_id":"AC-0001","saldo":0}', "CONSULTA;AC-0001;13")
     add(200, '{"cuenta_id":"AC-0002","saldo":500}', "CONSULTA;AC-0002;14")
     add(404, '{"error":"E401","mensaje":"cuenta inexistente"}', "CONSULTA;AC-9999;15")
-    # padding up to n_split
     while n < n_split - 1:
         add(200, '{"pong":true}', "PING;16")
 
@@ -668,11 +612,9 @@ def cmd_selftest(args):
     ok_diff = (different_slots == expected)
     print(f"  [{'OK' if ok_diff else 'FAIL'}] diff detects exactly the 2 "
           f"expected differences {expected}")
-    # show the text diff of each one
     for d in res["distintas"]:
         print(f"    {d['slot']}: policy={d['body_policy']!r}  log={d['body_log']!r}")
 
-    # patch
     out_path = os.path.join(tmpdir, "policy-patched.json")
     pns = argparse.Namespace(log=log_path, against=DEFAULT_POLICY,
                              out=out_path, frm=None, to=None)

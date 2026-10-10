@@ -215,8 +215,7 @@ def main():
     if res["diffs"]:
         print(f"\n[replay] diffs (max {args.max_diffs}):")
         for cid, i, cmd, reason in res["diffs"]:
-            # NOTE: the token "paso" is kept on purpose: record.py --from-diff
-            # parses this exact line format (see record.parse_diff_report).
+            # exact line format parsed by record.parse_diff_report (--from-diff)
             print(f"   {cid} paso {i} [{cmd}]: {reason}")
 
     if args.coverage:
@@ -237,7 +236,6 @@ def main():
                   f"p99={pctile(0.99)*1000:.0f}ms max={ts[-1]*1000:.0f}ms")
         print(f"[replay] 5xx responses observed: {res['http5xx']}")
 
-    # exit code: 0 if 100% of steps are equal
     sys.exit(0 if res["equal_steps"] == res["total_steps"] else 1)
 
 

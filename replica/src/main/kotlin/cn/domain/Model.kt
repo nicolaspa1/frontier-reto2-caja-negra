@@ -4,9 +4,8 @@ package cn.domain
  * Core domain types shared by the pipeline, the ledger and the adapters.
  *
  * The domain never sees Vert.x: HTTP and JSON enter through the [MessageHandler] and [JsonCodec] ports.
- * Spanish strings that appear in this package (rule names such as `MontoValido`, argument roles such as
- * `monto`/`origen`, template variables such as `cuentaId`) are *data* keys defined by `rules/policy-v1.json`
- * and the response bodies replicated byte for byte from the original service; they are intentionally not translated.
+ * Spanish identifiers (`MontoValido`, `monto`, `cuentaId`, ...) are policy data keys and response-body
+ * variables replicated from the original; they are not translated.
  */
 
 /** HTTP status and exact body (already rendered) to send back. */
