@@ -234,8 +234,9 @@ FACTS = [
       "(L1072, L1085; también `POST /msg` sin cuerpo, L3652), igual que `{` "
       "(L292), un cuerpo de sólo espacios (` ` L2630), dos objetos "
       "concatenados (`{...}{...}` L2648), coma final (`{\"m\":\"PING;64\",}` "
-      "L2911), JSON doblemente escapado (L3263) o un cuerpo cortado en medio de "
-      "una cadena (L3382). El parser es estricto: nada que no sea JSON válido "
+      "L2911), JSON doblemente escapado (L3263) o un cuerpo de 4096 bytes que no "
+      "era JSON completo (L3382; el log guarda sólo un marcador del cuerpo). El "
+      "parser es estricto: nada que no sea JSON válido "
       "llega a E102.",
       [M(path='/msg', req_sub='""', resp_sub='E100'), M(path='/msg', status=400, resp_sub='E100')],
       lines=[1072, 1085, 3652, 292, 2630, 2648, 2911, 3263, 3382]),
