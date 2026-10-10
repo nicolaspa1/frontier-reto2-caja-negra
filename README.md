@@ -72,7 +72,7 @@ Loader details and control-algorithm swap: [replica/README.md](replica/README.md
 
 ## Results so far
 
-- Hidden evaluation set: run 1 (13:52) **86/100** with concurrent test traffic on the shared ledger; run 2 (15:24) **87/100**, whose sequences were then replayed against the original to isolate three missing rules, all fixed and deployed at 15:38.
+- Hidden evaluation set: run 1 (13:52) **86/100** with concurrent test traffic on the shared ledger; run 2 (15:24) **87/100**, already graded against version 2 of the original, whose sequences were replayed against the original to isolate the missing rules; run 3 (16:33), with policy v2 deployed, **100/100** (40/40 easy, 40/40 regular, 20/20 hard).
 - Corpus plus the run-2 sequences (with the original's answers) against the deployed replica: **720/720 steps**, 203/203 cases; locally with the fuzz batches 1591/1591.
 - Fidelity tests over the log (`gradle test`): all logged `POST /msg` blocks reproduced (1074/1074 at the last commit).
 - `control-plane/validation/` 100-case set against a local build, 3 passes: 100/100 each, 0 nondeterministic steps. Public passes that overlapped other clients on the shared ledger scored lower; the replica is a single instance, so nothing else may hit it during an evaluation run ([control-plane/validation/REPORT.md](control-plane/validation/REPORT.md)).
