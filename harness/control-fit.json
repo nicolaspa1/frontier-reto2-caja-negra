@@ -1,0 +1,14 @@
+{
+  "familia": "iso7064",
+  "params": {
+    "keep": "",
+    "nonascii": "drop",
+    "agg": "iso_concat",
+    "alphabet": "a1",
+    "suffix": "00",
+    "formula": "98-",
+    "m": 97
+  },
+  "verificado_sobre": 282,
+  "formula_texto": "norm[case=None, descartar no-alfanuméricos, no-ASCII=drop]; concatenar dígitos (A=1..26) + sufijo '00'; m=97; control = 98 - (N % m)"
+}

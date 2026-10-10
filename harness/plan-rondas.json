@@ -1,0 +1,26 @@
+{
+ "_formato": "Plan de rondas 15:00-20:00 para la ronda larga del Reto 2. Lista ordenada [{ronda, ids, requests_estimados, orden}] que el monitor puede cargar. requests_estimados = mensajes + resets (total de llamadas HTTP de la ronda, cada sonda hace POST /__reset antes de sus mensajes). La bateria (orden 1) es la cabecera de cada ciclo: barata, ubica la capa que difiere antes de las rondas caras. Orden barato->caro y capa baja->alta (infra->formato->HTTP->respuesta->reglas).",
+ "cadencia": {
+  "ventana": "15:00-20:00 (token muere 20:00)",
+  "requests_por_ciclo": 277,
+  "ciclo_cada_min": "35-40",
+  "ciclos_estimados": 7,
+  "confirmacion_de_diffs": "todo cambio se confirma en 2 rondas separadas >= 30 s antes de marcarlo",
+  "pausa_entre_sondas_seg": 0.5,
+  "limite_tasa": "10 req/s",
+  "ultimo_ciclo": "19:00-19:45 reservado a re-grabado + harness/templates.py patch y entrega antes de las 20:00",
+  "presupuesto_dia": 8000,
+  "consumo_estimado": "7 ciclos x 277 ~= 1939 req + re-grabado (~537) ~= 2476 req/dia, holgadamente < 8000; el cuello es el tiempo, no el presupuesto"
+ },
+ "rondas": [
+  {"ronda": "BATERIA", "ids": ["BATERIA-27"], "requests_estimados": 28, "orden": 1, "clase": "cabecera", "nota": "labhelp.BATTERY (27 msgs + 1 reset); ubica la capa y el primer paso que difiere"},
+  {"ronda": "B-RONDA-HTTP", "ids": ["B-RONDA-HTTP"], "requests_estimados": 17, "orden": 2, "clase": "B", "nota": "contrato HTTP: rutas, auth, body, status (16 msgs + 1 reset)"},
+  {"ronda": "C-RONDA-FORMATO", "ids": ["C-RONDA-FORMATO"], "requests_estimados": 9, "orden": 3, "clase": "C", "nota": "campo/separador/case/alfabeto/longitud/trim (8 msgs + 1 reset)"},
+  {"ronda": "C-RONDA-ORDEN", "ids": ["C-RONDA-ORDEN"], "requests_estimados": 11, "orden": 4, "clase": "O", "nota": "precedencias de error, sin estado (10 msgs + 1 reset)"},
+  {"ronda": "D-RONDA-RESPUESTA", "ids": ["D-RONDA-RESPUESTA"], "requests_estimados": 9, "orden": 5, "clase": "D", "nota": "10 plantillas responses + errors, incl. sugerencia/NOTAS/HALT (8 msgs + 1 reset)"},
+  {"ronda": "A-RONDA-VALORES", "ids": ["A-RONDA-VALORES"], "requests_estimados": 29, "orden": 6, "clase": "A", "nota": "V1-V16 encadenadas con PREP compartido (28 msgs + 1 reset)"},
+  {"ronda": "RL-A..G", "ids": ["RL-A", "RL-B", "RL-C", "RL-D", "RL-E", "RL-F", "RL-G"], "requests_estimados": 77, "orden": 7, "clase": "A-N", "nota": "reglas de negocio nuevas con estado (70 msgs + 7 resets)"},
+  {"ronda": "S1..S10", "ids": ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10"], "requests_estimados": 97, "orden": 8, "clase": "S", "nota": "cambios silenciosos, sondas largas de 6-12 pasos (87 msgs + 10 resets)"}
+ ],
+ "total_requests_por_ciclo": 277
+}

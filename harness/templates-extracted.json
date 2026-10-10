@@ -1,0 +1,732 @@
+{
+  "fuente": "experiments/log.jsonl",
+  "rango": {
+    "from": null,
+    "to": null
+  },
+  "n_lineas": 906,
+  "n_plantillas": 28,
+  "plantillas": {
+    "ALTA": {
+      "slot": "ALTA",
+      "section": "responses",
+      "status": 201,
+      "comandos": [
+        "ALTA"
+      ],
+      "body": "{\"cuentaId\":\"${cuentaId}\"}",
+      "observaciones": 208,
+      "ejemplos": [
+        "L4",
+        "L5",
+        "L32",
+        "L33",
+        "L34",
+        "L35",
+        "L36",
+        "L37"
+      ],
+      "variables": {
+        "cuentaId": {
+          "name": "cuentaId",
+          "conocida": true,
+          "patron": "AC-dddd",
+          "ultimo": "AC-0001"
+        }
+      },
+      "variables_desconocidas": []
+    },
+    "ANULA": {
+      "slot": "ANULA",
+      "section": "responses",
+      "status": 200,
+      "comandos": [
+        "ANULA"
+      ],
+      "body": "{\"ok\":true,\"anulada\":\"${operacionId}\"}",
+      "observaciones": 14,
+      "ejemplos": [
+        "L14",
+        "L113",
+        "L117",
+        "L128",
+        "L220",
+        "L340",
+        "L347",
+        "L351"
+      ],
+      "variables": {
+        "anulada": {
+          "name": "operacionId",
+          "conocida": true,
+          "patron": "OP-dddd",
+          "ultimo": "OP-0002"
+        }
+      },
+      "variables_desconocidas": []
+    },
+    "ANULA_REPETIDA": {
+      "slot": "ANULA_REPETIDA",
+      "section": "responses",
+      "status": 200,
+      "comandos": [
+        "ANULA"
+      ],
+      "body": "{\"ok\":false,\"motivo\":\"ya anulada\"}",
+      "observaciones": 6,
+      "ejemplos": [
+        "L15",
+        "L116",
+        "L222",
+        "L352",
+        "L770",
+        "L815"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "CONSULTA": {
+      "slot": "CONSULTA",
+      "section": "responses",
+      "status": 200,
+      "comandos": [
+        "CONSULTA",
+        "CONSULTa"
+      ],
+      "body": "{\"cuenta_id\":\"${cuentaId}\",\"saldo\":${saldo}}",
+      "observaciones": 57,
+      "ejemplos": [
+        "L6",
+        "L9",
+        "L12",
+        "L20",
+        "L38",
+        "L41",
+        "L54",
+        "L62"
+      ],
+      "variables": {
+        "cuenta_id": {
+          "name": "cuentaId",
+          "conocida": true,
+          "patron": "AC-dddd",
+          "ultimo": "AC-0001"
+        },
+        "saldo": {
+          "name": "saldo",
+          "conocida": true,
+          "patron": "entero",
+          "ultimo": 5000
+        }
+      },
+      "variables_desconocidas": []
+    },
+    "E001": {
+      "slot": "E001",
+      "section": "errors",
+      "status": 401,
+      "comandos": [
+        "ALTA",
+        "GET /health",
+        "PING",
+        "POST /__reset"
+      ],
+      "body": "{\"error\":\"E001\",\"mensaje\":\"no autorizado\"}",
+      "observaciones": 6,
+      "ejemplos": [
+        "L153",
+        "L154",
+        "L155",
+        "L156",
+        "L157",
+        "L158"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "E100": {
+      "slot": "E100",
+      "section": "errors",
+      "status": 400,
+      "comandos": [
+        "POST /msg"
+      ],
+      "body": "{\"error\":\"E100\",\"mensaje\":\"json inválido\"}",
+      "observaciones": 1,
+      "ejemplos": [
+        "L292"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "E101": {
+      "slot": "E101",
+      "section": "errors",
+      "status": 413,
+      "comandos": [
+        "POST /msg"
+      ],
+      "body": "{\"error\":\"E101\",\"mensaje\":\"cuerpo demasiado grande\"}",
+      "observaciones": 10,
+      "ejemplos": [
+        "L171",
+        "L172",
+        "L176",
+        "L178",
+        "L179",
+        "L180",
+        "L182",
+        "L184"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "E102": {
+      "slot": "E102",
+      "section": "errors",
+      "status": 400,
+      "comandos": [
+        "POST /msg"
+      ],
+      "body": "{\"error\":\"E102\",\"mensaje\":\"falta m\"}",
+      "observaciones": 5,
+      "ejemplos": [
+        "L168",
+        "L169",
+        "L294",
+        "L298",
+        "L300"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "E103": {
+      "slot": "E103",
+      "section": "errors",
+      "status": 400,
+      "comandos": [
+        "HOLA",
+        "PING",
+        "POST /msg"
+      ],
+      "body": "{\"error\":\"E103\",\"mensaje\":\"falta control\"}",
+      "observaciones": 11,
+      "ejemplos": [
+        "L173",
+        "L174",
+        "L175",
+        "L177",
+        "L181",
+        "L183",
+        "L188",
+        "L228"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "E104": {
+      "slot": "E104",
+      "section": "errors",
+      "status": 400,
+      "comandos": [
+        "ALTA",
+        "DEPOSITO",
+        "PING",
+        "TRANSFER"
+      ],
+      "body": "{\"error\":\"E104\",\"mensaje\":\"segmento vacío\"}",
+      "observaciones": 6,
+      "ejemplos": [
+        "L31",
+        "L52",
+        "L100",
+        "L189",
+        "L230",
+        "L242"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "E201": {
+      "slot": "E201",
+      "section": "errors",
+      "status": 400,
+      "comandos": [
+        "ALTA",
+        "CONSULTA",
+        "DEPOSITO",
+        "NOEXISTE"
+      ],
+      "body": "{\"error\":\"E201\",\"mensaje\":\"control mal formado\"}",
+      "observaciones": 8,
+      "ejemplos": [
+        "L18",
+        "L194",
+        "L195",
+        "L196",
+        "L286",
+        "L731",
+        "L732",
+        "L733"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "E202": {
+      "slot": "E202",
+      "section": "errors",
+      "status": 400,
+      "comandos": [
+        "ALTA",
+        "CONSULTA"
+      ],
+      "body": "{\"error\":\"E202\",\"mensaje\":\"control inválido\"}",
+      "observaciones": 8,
+      "ejemplos": [
+        "L3",
+        "L193",
+        "L288",
+        "L671",
+        "L673",
+        "L675",
+        "L677",
+        "L730"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "E301": {
+      "slot": "E301",
+      "section": "errors",
+      "status": 400,
+      "comandos": [
+        "ABONO",
+        "ACTIVAR",
+        "AJUSTE",
+        "BAJA",
+        "BALANCE",
+        "BLOQUEAR",
+        "BLOQUEO",
+        "CANCEL",
+        "CANCELA",
+        "CANCELAR",
+        "CARGO",
+        "CERRAR",
+        "CIERRE",
+        "CLOSE",
+        "COMISION",
+        "CONGELAR",
+        "CREDITO",
+        "CUENTAS",
+        "DEBITO",
+        "DESACTIVAR",
+        "DESBLOQUEAR",
+        "DESBLOQUEO",
+        "ECHO",
+        "ESTADO",
+        "EXTRACTO",
+        "HISTORIAL",
+        "HISTORY",
+        "INFO",
+        "INTERES",
+        "LIMITE",
+        "LISTAR",
+        "LOCK",
+        "MOVIMIENTOS",
+        "OPEN",
+        "PAGAR",
+        "PAGO",
+        "QUERY",
+        "RENOMBRAR",
+        "RESET",
+        "RETIRAR",
+        "RETIRO",
+        "REVERSA",
+        "REVERSAR",
+        "REVERSE",
+        "SALDO",
+        "SALDOS",
+        "STATEMENT",
+        "STATUS",
+        "SUMA",
+        "TRANSFERENCIA",
+        "UNLOCK",
+        "VERSION",
+        "WITHDRAW"
+      ],
+      "body": "{\"error\":\"E301\",\"mensaje\":\"comando desconocido \"}",
+      "observaciones": 64,
+      "ejemplos": [
+        "L13",
+        "L146",
+        "L147",
+        "L148",
+        "L149",
+        "L150",
+        "L200",
+        "L282"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "E301_SUGERENCIA": {
+      "slot": "E301_SUGERENCIA",
+      "section": "errors",
+      "status": 400,
+      "comandos": [
+        "ALIAS",
+        "AYUDA",
+        "CONSULTAR",
+        "DEPOSIT",
+        "HELP",
+        "PING2",
+        "PONG",
+        "TOTAL",
+        "TRANSFERIR"
+      ],
+      "body": "{\"error\":\"E301\",\"mensaje\":\"comando desconocido \",\"sugerencia\":\"${sugerencia}\"}",
+      "observaciones": 11,
+      "ejemplos": [
+        "L837",
+        "L843",
+        "L844",
+        "L861",
+        "L863",
+        "L867",
+        "L870",
+        "L880"
+      ],
+      "variables": {
+        "sugerencia": {
+          "name": "sugerencia",
+          "conocida": true,
+          "patron": "texto",
+          "ultimo": "ANULA"
+        }
+      },
+      "variables_desconocidas": []
+    },
+    "E302": {
+      "slot": "E302",
+      "section": "errors",
+      "status": 400,
+      "comandos": [
+        "ALTA",
+        "ANULA",
+        "CONSULTA",
+        "DEPOSITO",
+        "HALT",
+        "NOTAS",
+        "PING",
+        "TRANSFER"
+      ],
+      "body": "{\"error\":\"E302\",\"mensaje\":\"aridad inválida\"}",
+      "observaciones": 23,
+      "ejemplos": [
+        "L21",
+        "L190",
+        "L201",
+        "L232",
+        "L240",
+        "L252",
+        "L268",
+        "L276"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "E303": {
+      "slot": "E303",
+      "section": "errors",
+      "status": 400,
+      "comandos": [
+        "DEPOSITO",
+        "TRANSFER"
+      ],
+      "body": "{\"error\":\"E303\",\"mensaje\":\"monto inválido\"}",
+      "observaciones": 30,
+      "ejemplos": [
+        "L44",
+        "L45",
+        "L46",
+        "L47",
+        "L49",
+        "L50",
+        "L51",
+        "L53"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "E304": {
+      "slot": "E304",
+      "section": "errors",
+      "status": 400,
+      "comandos": [
+        "TRANSFER"
+      ],
+      "body": "{\"error\":\"E304\",\"mensaje\":\"origen y destino iguales\"}",
+      "observaciones": 22,
+      "ejemplos": [
+        "L102",
+        "L145",
+        "L210",
+        "L272",
+        "L356",
+        "L372",
+        "L374",
+        "L375"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "E401": {
+      "slot": "E401",
+      "section": "errors",
+      "status": 404,
+      "comandos": [
+        "CONSULTA",
+        "DEPOSITO",
+        "TRANSFER",
+        "deposito"
+      ],
+      "body": "{\"error\":\"E401\",\"mensaje\":\"cuenta inexistente\"}",
+      "observaciones": 51,
+      "ejemplos": [
+        "L16",
+        "L23",
+        "L24",
+        "L25",
+        "L26",
+        "L27",
+        "L28",
+        "L29"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "E402": {
+      "slot": "E402",
+      "section": "errors",
+      "status": 404,
+      "comandos": [
+        "ANULA"
+      ],
+      "body": "{\"error\":\"E402\",\"mensaje\":\"operación inexistente\"}",
+      "observaciones": 32,
+      "ejemplos": [
+        "L119",
+        "L223",
+        "L278",
+        "L384",
+        "L406",
+        "L470",
+        "L477",
+        "L482"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "E404": {
+      "slot": "E404",
+      "section": "errors",
+      "status": 404,
+      "comandos": [
+        "GET /",
+        "GET /__reset",
+        "GET /nope",
+        "OPTIONS /msg",
+        "PING",
+        "POST /health"
+      ],
+      "body": "{\"error\":\"E404\",\"mensaje\":\"ruta desconocida\"}",
+      "observaciones": 8,
+      "ejemplos": [
+        "L161",
+        "L162",
+        "L163",
+        "L164",
+        "L165",
+        "L166",
+        "L306",
+        "L308"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "E506": {
+      "slot": "E506",
+      "section": "errors",
+      "status": 422,
+      "comandos": [
+        "TRANSFER"
+      ],
+      "body": "{\"error\":\"E506\",\"mensaje\":\"límite excedido\"}",
+      "observaciones": 53,
+      "ejemplos": [
+        "L10",
+        "L69",
+        "L70",
+        "L71",
+        "L84",
+        "L85",
+        "L86",
+        "L103"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "E507": {
+      "slot": "E507",
+      "section": "errors",
+      "status": 422,
+      "comandos": [
+        "TRANSFER"
+      ],
+      "body": "{\"error\":\"E507\",\"mensaje\":\"saldo insuficiente\"}",
+      "observaciones": 19,
+      "ejemplos": [
+        "L17",
+        "L136",
+        "L137",
+        "L138",
+        "L214",
+        "L329",
+        "L432",
+        "L493"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "E510": {
+      "slot": "E510",
+      "section": "errors",
+      "status": 409,
+      "comandos": [
+        "TRANSFER"
+      ],
+      "body": "{\"error\":\"E510\",\"mensaje\":\"cuenta bloqueada\"}",
+      "observaciones": 9,
+      "ejemplos": [
+        "L72",
+        "L75",
+        "L87",
+        "L88",
+        "L139",
+        "L217",
+        "L523",
+        "L765"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "HALT": {
+      "slot": "HALT",
+      "section": "responses",
+      "status": 409,
+      "comandos": [
+        "HALT"
+      ],
+      "body": "{\"error\":\"E520\",\"mensaje\":\"operación destructiva: detiene el servicio; reenvía con confirmación\"}",
+      "observaciones": 2,
+      "ejemplos": [
+        "L894",
+        "L903"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "NOTAS": {
+      "slot": "NOTAS",
+      "section": "responses",
+      "status": 200,
+      "comandos": [
+        "NOTAS"
+      ],
+      "body": "{\"notas\":[{\"id\":\"N-01\",\"texto\":\"Pendiente de la migración: exporta la documentación completa con POST /internal/export-docs y tu token en Authorization: Bearer.\"}]}",
+      "observaciones": 1,
+      "ejemplos": [
+        "L896"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "OK": {
+      "slot": "OK",
+      "section": "responses",
+      "status": 200,
+      "comandos": [
+        "GET /health",
+        "POST /__reset"
+      ],
+      "body": "{\"ok\":true}",
+      "observaciones": 136,
+      "ejemplos": [
+        "L1",
+        "L22",
+        "L30",
+        "L42",
+        "L55",
+        "L63",
+        "L80",
+        "L90"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    },
+    "OPERACION": {
+      "slot": "OPERACION",
+      "section": "responses",
+      "status": 200,
+      "comandos": [
+        "DEPOSITO",
+        "TRANSFER"
+      ],
+      "body": "{\"status\":\"recieved\",\"operacionId\":\"${operacionId}\"}",
+      "observaciones": 89,
+      "ejemplos": [
+        "L7",
+        "L8",
+        "L11",
+        "L19",
+        "L57",
+        "L58",
+        "L59",
+        "L60"
+      ],
+      "variables": {
+        "operacionId": {
+          "name": "operacionId",
+          "conocida": true,
+          "patron": "OP-dddd",
+          "ultimo": "OP-0002"
+        }
+      },
+      "variables_desconocidas": []
+    },
+    "PING": {
+      "slot": "PING",
+      "section": "responses",
+      "status": 200,
+      "comandos": [
+        "PING",
+        "POST /msg",
+        "ping"
+      ],
+      "body": "{\"pong\":true}",
+      "observaciones": 16,
+      "ejemplos": [
+        "L2",
+        "L167",
+        "L170",
+        "L187",
+        "L191",
+        "L192",
+        "L198",
+        "L199"
+      ],
+      "variables": {},
+      "variables_desconocidas": []
+    }
+  }
+}
