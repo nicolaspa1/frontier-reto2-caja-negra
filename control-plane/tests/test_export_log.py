@@ -62,8 +62,17 @@ def test_export_produces_official_format(tmp_path, monkeypatch):
     # /__reset and raw requests are described with metodo/ruta
     assert rows[1]["request"] == {"metodo": "POST", "ruta": "/__reset"}
 
-    # auth_kind becomes an "auth" field
-    assert rows[2]["request"]["auth"] == "valid"
+    # the official `request` is only the body sent: no injected "auth" key
+    # (the credential used, when not the valid token, goes to `conclusion`)
+    assert "auth" not in rows[2]["request"]
+
+    # id is the export line number (unique, 1-based), x_req numeric when it is
+    assert [r["id"] for r in rows] == [1, 2, 3]
+    assert rows[1]["x_req"] == "def456"
+
+    # conclusion is always filled with a short sentence derived from the response
+    assert all(r["conclusion"] for r in rows)
+    assert rows[0]["conclusion"] == "200 pong"
 
     # the hypothesis map was created at the patched path
     assert os.path.exists(hip_path)

@@ -23,9 +23,15 @@ Besides the tables, the document carries prose blocks generated FROM THE LOG
 (not by hand): the step-by-step control computation (recomputed and checked
 against the official examples), a literal request/response example per command,
 the single validation pipeline and the stateful sequences of the Memoria
-section. `--check` also verifies that every re-run of the 27-step battery
-(L198-L224) detected in the log is identical to the baseline in status and body
-(Cambios section).
+section. `--check` also verifies the battery re-runs (27 steps, L198-L224)
+detected in the log: the ones recorded against version 1 (before V2_FROM) must
+be identical to the baseline in status and body, and the ones recorded against
+version 2 must differ from the baseline in the same steps and be identical among
+themselves (Cambios section, CHG-0a/CHG-0b).
+
+Lines are cited by POSITION in experiments/log.jsonl (1-based), which is the
+`id` of spec/experimentos.jsonl (see export_log.py); the log's own `n` counter
+is not used because it collided 6 times.
 
 NOTE: this tool writes the Spanish deliverable spec/especificacion.md. All the
 behavior descriptions, section titles and prose strings below are the document
@@ -43,6 +49,7 @@ CLI:
 import argparse
 import json
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -51,7 +58,7 @@ LOG = os.path.join(ROOT, "experiments", "log.jsonl")
 REPO = os.path.dirname(ROOT)  # repository root (spec/ is shared by both planes)
 OUT = os.path.join(REPO, "spec", "especificacion.md")
 
-MAX_CITES_EXPLICIT = 16   # citas máximas cuando las líneas son explícitas
+MAX_CITES_EXPLICIT = 20   # citas máximas cuando las líneas son explícitas
 MAX_CITES_SEARCH = 5      # citas máximas cuando se buscan por matcher
 
 SECTIONS = [
@@ -106,10 +113,11 @@ BATTERY_BASE = (197, 224)
 V2_FROM = 5555  # first log line recorded against version 2 of the original
 
 INCIDENTE = [
-    ("CHG-INC-1", "Qué cambió (1/3): el límite por transferencia bajó de 100000 a 50000, inclusivo: `TRANSFER;AC-0001;AC-0002;50000` -> 200 (L5760, L5821) y 50001 o 100000 -> 422 E506 (L5559, L5560, L5561). Bisección sobre estado limpio en la sección `incidente-bisect`.", ["L5760", "L5821", "L5559", "L5560", "L5561"], "confirmado"),
-    ("CHG-INC-2", "Qué cambió (2/3): `CONSULTA` devuelve el saldo como CADENA con dos decimales, siendo la unidad la centésima del monto almacenado: 22 depósitos de 1 -> `\\\"saldo\\\":\\\"0.22\\\"`, depósito de 1000000 -> `\\\"10000.00\\\"`, saldo negativo tras ANULA -> `\\\"-1.00\\\"` (L5565, L5566, L5580, L5605). En v1 era un entero.", ["L5565", "L5566", "L5580", "L5605"], "confirmado"),
-    ("CHG-INC-3", "Qué cambió (3/3): la cuenta bloqueada responde 423 (antes 409) y el cuerpo añade `intentos`, el número de intentos desde el bloqueo: `{\\\"error\\\":\\\"E510\\\",\\\"mensaje\\\":\\\"cuenta bloqueada\\\",\\\"intentos\\\":1}`, luego 2, 3... (L5562, L5563, L5564, L5660). El contador se reinicia cuando el bloqueo se levanta por depósito.", ["L5562", "L5563", "L5564", "L5660"], "confirmado"),
-    ("CHG-INC-4", "Desde cuándo y cómo se detectó: ticket FR-0153 abierto a las 15:30; la ronda del monitor de las 15:55:17 (L5527-L5554) aún respondía como v1 y el barrido del incidente desde L5555 (15:55) ya como v2; la ronda de las 15:57 del monitor marcó 10 alertas en la batería (L5712, L5717, L5719). Antes, el replay del corpus completo (427 pasos, 15:45) y de los lotes de fuzzing (871 pasos, 15:53) contra el original no mostró diferencias: el cambio real ocurrió hacia las 15:55. Adaptación: `rules/policy-v2.json` con los tres valores y sus citas; el mismo jar la carga con `POLICY=v2`; verificación por replay del corpus regrabado en v2 y por los tests de fidelidad sobre el log partido en v1/v2 (L5555).", ["L5527", "L5554", "L5562", "L5712", "L5717", "L5719"], "confirmado"),
+    # `{TS:n}` / `{TS5:n}` are replaced in main() by the HH:MM:SS / HH:MM of log line n.
+    ("CHG-INC-1", "Qué cambió (1/3): el límite por transferencia bajó de 100000 a 50000, inclusivo: `TRANSFER;AC-0001;AC-0002;50000` -> 200 (L5760, L5821) y 50001 (L5820), 99999 (L5759) o 100000 (L5559, L5560, L5561; L5712 en la batería) -> 422 E506. Bisección sobre estado limpio en la sección `incidente-bisect` (74999, 62499 y 56249 -> E506, L5801–L5803). En v1, 100000 -> 200 (L68, L11; CMD-TRANSFER-2).", ["L5760", "L5821", "L5820", "L5759", "L5559", "L5560", "L5561", "L5712", "L5801", "L5802", "L5803"], "confirmado"),
+    ("CHG-INC-2", "Qué cambió (2/3): `CONSULTA` devuelve el saldo como CADENA con dos decimales, siendo la unidad la centésima del monto almacenado: 22 depósitos de 1 -> `\"saldo\":\"0.22\"` (L5605); depósito de 1000000 -> `\"10000.00\"` (L5565); cuenta sin movimientos -> `\"0.00\"` (L5566, L5580, L5706); 2 x 9999999999 -> `\"199999999.98\"` (L5612); 150 depositados menos 100 transferidos -> `\"0.50\"` (L5778); saldo negativo tras ANULA -> `\"-1.00\"` (L5780). En v1 era un entero (`\"saldo\":0` en L205 frente a `\"0.00\"` en L5706, mismo paso de la batería; CMD-CONSULTA-1).", ["L5605", "L5565", "L5566", "L5580", "L5706", "L5612", "L5778", "L5780", "L205"], "confirmado"),
+    ("CHG-INC-3", "Qué cambió (3/3): la cuenta bloqueada responde 423 (antes 409) y el cuerpo añade `intentos`, el número de intentos rechazados desde el bloqueo: `{\"error\":\"E510\",\"mensaje\":\"cuenta bloqueada\",\"intentos\":1}`, luego 2, 3 (L5562, L5563, L5564; L5660, L5717) y hasta 12 observados (L5804–L5815). El umbral sigue siendo 3 fallos E506/E507 consecutivos como origen y una TRANSFER exitosa sigue reiniciando los strikes (L5674, L5675 dos E507; L5676 depósito; L5677 -> 200; L5678–L5680 tres E507; L5681 -> 423 intentos 1). El desbloqueo por depósito a la cuenta bloqueada (CMD-TRANSFER-12) se mantiene y reinicia `intentos`: E507 x3 (L5785–L5787) -> 423 intentos 1, 2 (L5788, L5789); `DEPOSITO;AC-0001;5` (L5790) -> las transferencias vuelven a evaluarse (E507 en L5791–L5793) y el nuevo bloqueo empieza otra vez en intentos 1 (L5794) y 2 (L5796).", ["L5562", "L5563", "L5564", "L5660", "L5717", "L5804", "L5815", "L5674", "L5677", "L5681", "L5788", "L5789", "L5790", "L5791", "L5794", "L5796"], "confirmado"),
+    ("CHG-INC-4", "Desde cuándo y cómo se detectó: ticket FR-0153 abierto a las 15:30. Ventana real del cambio: entre las {TS:5554} (L5554, última respuesta de v1: la ronda del monitor de las {TS5:5527}, L5527–L5554, aún idéntica a la base) y las {TS:5555} (L5555/L5556, primer request del barrido `incidente-*`, ya v2: L5559 100000 -> E506). El header X-Req pasó de 4544 (L5554) a 1 (L5556): el original se redesplegó en esa ventana. La ronda del monitor de las {TS5:5699} marcó 10 alertas en la batería (L5706, L5712, L5717, L5719…; detalle en CHG-0b). Antes, el replay del corpus completo (427 pasos, 15:45) y de los lotes de fuzzing (871 pasos, 15:53; L3899–L5522) contra el original no mostró diferencias: el cambio no ocurrió a las 15:30 sino en esa ventana. Adaptación: `rules/policy-v2.json` con los tres valores y sus citas; el mismo jar la carga con `POLICY=v2`; verificación por replay del corpus regrabado en v2 y por los tests de fidelidad sobre el log partido en v1/v2 (L5555).", ["L5527", "L5554", "L5555", "L5556", "L5559", "L5706", "L5712", "L5717", "L5719"], "confirmado"),
 ]
 
 
@@ -342,10 +350,13 @@ FACTS = [
        M(req_m=' PING;64', resp_sub='E301'), M(req_m='PING ;64', resp_sub='E301')],
       lines=[37, 34, 1229, 1230]),
     F("Integridad", "INT-13",
-      "Longitud del nombre en ALTA: no se probó ningún límite propio (máximo "
-      "observado 10 caracteres, `Juan Perez` L34). El reemplazo no impone "
-      "ninguno aparte de los 8192 bytes del cuerpo (IN-11).",
-      [], assume=True),
+      "Longitud del nombre en ALTA: no se observó ningún límite propio. Máximo "
+      "observado: 80 caracteres (`ALTA;NNN…N;93` -> 201, L5625, v2) y 10 en v1 "
+      "(`Juan Perez`, L34). El reemplazo no impone ninguno aparte de los 8192 "
+      "bytes del cuerpo (IN-11); un tope entre 80 y ~8170 caracteres no queda "
+      "descartado.",
+      [M(req_sub='ALTA;NNNNNNNNNN', status=201), M(req_m='ALTA;Juan Perez;25', status=201)],
+      lines=[5625, 34], conf='probable'),
     F("Integridad", "INT-14",
       "Número máximo de segmentos: no se probó un tope. Lo observado: hasta 6 "
       "segmentos (`TRANSFER;AC-0001;AC-0002;100;extra;49` L888 -> E302). El "
@@ -396,9 +407,12 @@ FACTS = [
     # --- CONSULTA
     F("Comandos", "CMD-CONSULTA-1",
       "`CONSULTA;<cuenta>;<control>` -> 200 `{\"cuenta_id\":\"AC-000n\","
-      "\"saldo\":<entero>}` (claves snake_case, saldo entero sin decimales, "
-      "puede ser negativo: ver CMD-ANULA-5). No modifica el estado.",
-      [M(status=200, resp_sub='cuenta_id')], lines=[6, 9, 12, 20, 38, 41, 130]),
+      "\"saldo\":<saldo>}` (claves snake_case). No modifica el estado. Formato "
+      "del saldo en v1 (hasta las 15:55, L5554): entero sin decimales, puede ser "
+      "negativo (`\"saldo\":0` L6; -60000 en CMD-ANULA-5). En v2 (desde L5555) "
+      "es una CADENA con dos decimales, en centésimas del monto (`\"saldo\":"
+      "\"0.00\"` L5706, `\"2500.00\"` L5719): ver CHG-INC-2.",
+      [M(status=200, resp_sub='cuenta_id')], lines=[6, 9, 12, 20, 38, 41, 130, 5706, 5719]),
     F("Comandos", "CMD-CONSULTA-2",
       "El id debe coincidir EXACTAMENTE con `AC-` + 4 dígitos: `ac-0001` "
       "(L26, L39, L248), `AC-1` (L27, L40, L250), `AC-00001` (L28), `0001` "
@@ -455,14 +469,15 @@ FACTS = [
        M(resp_sub='"saldo":110000')],
       lines=[8, 9, 11, 12, 68, 77]),
     F("Comandos", "CMD-TRANSFER-2",
-      "Límite por operación = 100000 INCLUSIVE: 100000 -> 200 (L68, L11); "
-      "100001 (L69), 110000 (L70), 119999 (L71), 120000 (L10), 200000 (L103) "
-      "-> 422 `{\"error\":\"E506\",\"mensaje\":\"límite excedido\"}`. El "
-      "monto sigue las reglas de DEPOSITO (CMD-DEPOSITO-2): 0 y -5 -> E303 "
-      "(L98, L101, L274).",
+      "Límite por operación, INCLUSIVE. v1 (hasta las 15:55, L5554): 100000 -> "
+      "200 (L68, L11); 100001 (L69), 110000 (L70), 119999 (L71), 120000 (L10), "
+      "200000 (L103) -> 422 `{\"error\":\"E506\",\"mensaje\":\"límite "
+      "excedido\"}`. v2 (desde L5555): el límite es 50000 y 100000 -> E506 "
+      "(L5712, L5559): ver CHG-INC-1. El monto sigue las reglas de DEPOSITO "
+      "(CMD-DEPOSITO-2): 0 y -5 -> E303 (L98, L101, L274).",
       [M(req_sub='TRANSFER', resp_sub='E506'), M(req_m='TRANSFER;AC-0001;AC-0002;100000;12', status=200),
        M(req_sub='TRANSFER', resp_sub='E303')],
-      lines=[68, 11, 69, 70, 71, 10, 103, 98, 101, 274]),
+      lines=[68, 11, 69, 70, 71, 10, 103, 5712, 5559, 98, 101, 274]),
     F("Comandos", "CMD-TRANSFER-3",
       "Saldo insuficiente en el origen -> 422 `{\"error\":\"E507\",\"mensaje\":"
       "\"saldo insuficiente\"}` (L17: 50000 con saldo 40000 (L9); L136: 100 con "
@@ -496,10 +511,13 @@ FACTS = [
       [M(req_sub='TRANSFER', resp_sub='E302'), M(req_sub='TRANSFER', resp_sub='E104')],
       lines=[276, 888, 100]),
     F("Comandos", "CMD-TRANSFER-9",
-      "TRANSFER con monto > 9999999999 (p. ej. 10000000000): no se probó (sólo "
-      "en DEPOSITO, L61). El reemplazo valida el monto con la misma regla que "
-      "DEPOSITO antes del límite por operación -> E303, no E506.",
-      [], assume=True),
+      "TRANSFER con monto > 9999999999: `TRANSFER;AC-0001;AC-0002;10000000000;21` "
+      "-> 400 E303, no E506 (L5613, v2; en el mismo estado `DEPOSITO` con ese "
+      "monto también E303, L5610). Una sola observación, en v2; en v1 sólo se "
+      "probó en DEPOSITO (L61). El reemplazo valida el monto con la misma regla "
+      "que DEPOSITO antes del límite por operación -> E303.",
+      [M(req_sub='TRANSFER;AC-0001;AC-0002;10000000000', resp_sub='E303')],
+      lines=[5613]),
     F("Comandos", "CMD-TRANSFER-10",
       "Origen = destino con monto inválido (`TRANSFER;AC-0001;AC-0001;0;74`) "
       "-> E303, no E304 (L1068; ídem `abc` L1081); origen = destino "
@@ -546,11 +564,12 @@ FACTS = [
       "400 E302.",
       [M(req_sub='ANULA', resp_sub='E302')], lines=[280, 889]),
     F("Comandos", "CMD-ANULA-7",
-      "ANULA con id mal formado (`OP-1`, `op-0001`, `AC-0001`): no se probó "
-      "(sólo ids bien formados inexistentes, L119/L278). El reemplazo busca el "
-      "id literal en sus operaciones y responde 404 E402 si no existe, sin "
-      "validar el formato.",
-      [], assume=True),
+      "ANULA con id mal formado (`OP-1`, `op-0001`, `AC-0001`): no se probó. Lo "
+      "observado son ids bien formados inexistentes: `OP-9999` (L119), `OP-0001` "
+      "sin operaciones (L278) y `OP-0000` (L5649, v2) -> 404 E402. El reemplazo "
+      "busca el id literal en sus operaciones y responde 404 E402 si no existe, "
+      "sin validar el formato.",
+      [M(resp_sub='E402')], lines=[119, 278, 5649], assume=True),
     F("Comandos", "CMD-ANULA-8",
       "ANULA de una TRANSFER cuyo origen está bloqueado, y su efecto sobre el "
       "contador de fallos: no se probó. El reemplazo revierte igual (la "
@@ -671,13 +690,15 @@ FACTS = [
       [M(resp_sub='operacionId')], lines=[7, 8, 11, 19, 112, 127]),
     F("Memoria entre requests", "MEM-4",
       "BLOQUEO por cuenta: tras 3 TRANSFER rechazadas como ORIGEN por E506 "
-      "(L84–L86) o E507 (L136–L138), la cuarta y siguientes como origen -> 409 "
-      "`{\"error\":\"E510\",\"mensaje\":\"cuenta bloqueada\"}` aunque el monto "
-      "sea válido (L87, L88, L139, L72). Se bloquea sólo la cuenta origen. "
-      "Secuencia literal más abajo.",
+      "(L84–L86) o E507 (L136–L138), la cuarta y siguientes como origen -> "
+      "E510 `cuenta bloqueada` aunque el monto sea válido (L87, L88, L139, "
+      "L72). Se bloquea sólo la cuenta origen. Status y cuerpo en v1 (hasta las "
+      "15:55, L5554): 409 `{\"error\":\"E510\",\"mensaje\":\"cuenta bloqueada\"}`; "
+      "en v2 (desde L5555): 423 y el cuerpo añade `intentos` (L5717, L5562): "
+      "ver CHG-INC-3. Secuencia literal más abajo.",
       [M(resp_sub='E510'), M(section_sub='bloqueo', resp_sub='E506'),
        M(section_sub='bloqueo', resp_sub='E507')],
-      lines=[84, 85, 86, 87, 88, 136, 137, 138, 139, 72]),
+      lines=[84, 85, 86, 87, 88, 136, 137, 138, 139, 72, 5717, 5562]),
     F("Memoria entre requests", "MEM-5",
       "El contador de fallos se REINICIA con una TRANSFER exitosa como origen: "
       "2 fallos (L683, L684), un éxito (L685), 2 fallos más (L686, L687) y la "
@@ -699,11 +720,18 @@ FACTS = [
        M(req_sub='TRANSFER;AC-0001', resp_sub='E510')],
       lines=[212, 213, 215, 216, 217, 760, 761, 763, 764, 765, 806, 810]),
     F("Memoria entre requests", "MEM-6c",
-      "Si E303 (monto inválido) o E304 (origen = destino) cuentan como strike: "
-      "no se probó. En L144/L145 la cuenta ya estaba bloqueada y en L612–L620 "
-      "hubo cuatro E304 seguidos sin ninguna TRANSFER válida posterior que lo "
-      "revele. El reemplazo sólo cuenta E506 y E507.",
-      [], assume=True),
+      "E401, E304 y E303 como origen NO cuentan como strike (observado en v2, "
+      "una secuencia): tres E401 (L5665–L5667), un E304 (L5668) y un E303 "
+      "(L5669) seguidos y la TRANSFER válida siguiente -> 200 (L5670); si "
+      "alguno contara, con cinco fallos seguidos habría sido E510. En v1 no era "
+      "separable (L144/L145 cuenta ya bloqueada; L612–L620 sin TRANSFER válida "
+      "posterior). El reemplazo sólo cuenta E506 y E507.",
+      # incidente-* bodies are logged as raw strings: match on the serialized body
+      [M(req_sub='TRANSFER;AC-0001;AC-0099;1;41', resp_sub='E401', section_sub='incidente-strikes'),
+       M(req_sub='TRANSFER;AC-0001;AC-0001;1;71', resp_sub='E304', section_sub='incidente-strikes'),
+       M(req_sub='TRANSFER;AC-0001;AC-0002;0;44', resp_sub='E303', section_sub='incidente-strikes'),
+       M(req_sub='TRANSFER;AC-0001;AC-0002;1;41', status=200, section_sub='incidente-strikes')],
+      lines=[5665, 5666, 5667, 5668, 5669, 5670], conf='probable'),
     F("Memoria entre requests", "MEM-7",
       "No hay comando de desbloqueo: DESBLOQUEO (L148, L829), DESBLOQUEAR "
       "(L830), UNLOCK (L875) y ACTIVAR (L858) -> E301.",
@@ -735,11 +763,14 @@ FACTS = [
     F("Errores", "ERR-CATALOGO",
       "Catálogo observado (status): E001 401; E100, E102, E103, E104, E201, "
       "E202, E301, E302, E303, E304 400; E401, E402, E404 404; E101 413; E506, "
-      "E507 422; E510, E520 409. Cuerpo siempre `{\"error\":\"Exxx\","
-      "\"mensaje\":\"...\"}` (E301 puede añadir `sugerencia`).",
+      "E507 422; E520 409; E510 409 en v1 (hasta las 15:55, L72) y 423 con "
+      "`intentos` en v2 (desde L5555: L5717, ver CHG-INC-3); E599 503 (servicio "
+      "detenido tras `HALT;1`, L2272, ver ERR-E599). Cuerpo siempre `{\"error\":"
+      "\"Exxx\",\"mensaje\":\"...\"}` (E301 puede añadir `sugerencia`; E510 en v2 "
+      "añade `intentos`).",
       [M(resp_sub='E001'), M(resp_sub='E404'), M(resp_sub='E506'), M(resp_sub='E510'),
-       M(resp_sub='E520'), M(resp_sub='E402'), M(resp_sub='E101')],
-      lines=[153, 161, 10, 72, 894, 119, 186]),
+       M(resp_sub='E520'), M(resp_sub='E402'), M(resp_sub='E101'), M(resp_sub='E599')],
+      lines=[153, 161, 10, 72, 894, 119, 186, 5717, 2272]),
     # --- capa HTTP
     F("Errores", "ERR-ORDEN-H-1",
       "Ruta (E404) antes que autenticación (E001): sin credencial "
@@ -886,14 +917,19 @@ FACTS = [
       lines=[105, 422, 474]),
     F("Errores", "ERR-ORDEN-T-12",
       "TRANSFER: E510 antes que E506 (origen bloqueado con monto sobre el "
-      "límite -> E510: L72 con 120000, L87 con 100001).",
+      "límite -> E510: L72 con 120000, L87 con 100001; en v2 también, con 423: "
+      "L5717 con 100001 y L5804 con 53124 sobre el límite 50000).",
       [M(req_m='TRANSFER;AC-0001;AC-0002;120000;55', resp_sub='E510'),
-       M(req_m='TRANSFER;AC-0001;AC-0002;100001;9', resp_sub='E510')],
-      lines=[72, 87]),
+       M(req_m='TRANSFER;AC-0001;AC-0002;100001;9', resp_sub='E510'),
+       M(req_m='TRANSFER;AC-0001;AC-0002;53124;96', resp_sub='E510')],
+      lines=[72, 87, 5717, 5804]),
     F("Errores", "ERR-ORDEN-T-13",
       "TRANSFER: E510 antes que E507 (origen bloqueado con saldo 0 y monto "
-      "100 -> E510, L139).",
-      [M(req_m='TRANSFER;AC-0002;AC-0001;100;12', resp_sub='E510')], lines=[139]),
+      "100 -> E510, L139, v1; en v2 con 423: saldo 0 y monto 10 -> E510, "
+      "L5788).",
+      [M(req_m='TRANSFER;AC-0002;AC-0001;100;12', resp_sub='E510'),
+       M(req_m='TRANSFER;AC-0001;AC-0002;10;13', status=423, resp_sub='E510')],
+      lines=[139, 5788]),
     F("Errores", "ERR-ORDEN-T-14",
       "TRANSFER: E506 antes que E507 (monto sobre el límite y saldo "
       "insuficiente -> E506: L103 200000 con saldo 50000; L464 y L494 100001 "
@@ -956,18 +992,26 @@ FACTS = [
       "422 `{\"error\":\"E507\",\"mensaje\":\"saldo insuficiente\"}`.",
       [M(status=422, resp_sub='E507')], lines=[17, 136]),
     F("Errores", "ERR-E510",
-      "409 `{\"error\":\"E510\",\"mensaje\":\"cuenta bloqueada\"}`.",
-      [M(status=409, resp_sub='E510')], lines=[72, 87, 139]),
+      "v1 (hasta las 15:55, L5554): 409 `{\"error\":\"E510\",\"mensaje\":\"cuenta "
+      "bloqueada\"}` (L72, L87, L139). v2 (desde L5555): 423 `{\"error\":\"E510\","
+      "\"mensaje\":\"cuenta bloqueada\",\"intentos\":<n>}` (L5562, L5717); ver "
+      "CHG-INC-3.",
+      [M(status=409, resp_sub='E510'), M(status=423, resp_sub='E510')],
+      lines=[72, 87, 139, 5562, 5717]),
     F("Errores", "ERR-E520",
       "409 `{\"error\":\"E520\",\"mensaje\":\"operación destructiva: detiene el "
       "servicio; reenvía con confirmación\"}` (sólo HALT).",
       [M(status=409, resp_sub='E520')], lines=[894, 903]),
 
     # ======================== Changes during the day ========================
-    F("Cambios durante el día", "CHG-0",
-      "{SIN_CAMBIOS}",
+    F("Cambios durante el día", "CHG-0a",
+      "{SIN_CAMBIOS_V1}",
       [M(path='/msg')],
-      lines=[198, 224]),  # se completa en main() con cada re-ejecución detectada
+      lines=[198, 224]),  # completed in main() with the first/last line of each v1 re-run
+    F("Cambios durante el día", "CHG-0b",
+      "{CAMBIOS_V2}",
+      [M(path='/msg')],
+      lines=[]),  # completed in main() with the differing steps of the first v2 re-run
     F("Cambios durante el día", "CHG-1",
       "Método de detección: un monitor periódico hace `/__reset`, re-ejecuta "
       "la batería de 27 pasos (L197–L224) y compara status y cuerpo con la "
@@ -999,13 +1043,15 @@ FACTS = [
        M(path='/__reset', status=200), M(req_sub='ALTA;Lu;4', status=201), M(req_sub='TRANSFER;', status=503, resp_sub='E599')],
       lines=[2272, 2273, 2274, 2275, 2276, 2277, 2278]),
     F("Comandos", "CMD-TRANSFER-11",
-      "Transferencias entre cuentas del MISMO titular (mismo nombre exacto en "
-      "ALTA) están exentas del límite por operación: `ALTA;Lucia`×2, depósito "
+      "v1 (hasta las 15:55, L5554; límite 100000): las transferencias entre "
+      "cuentas del MISMO titular (mismo nombre exacto en ALTA) están exentas "
+      "del límite por operación: `ALTA;Lucia`×2, depósito "
       "500000 y `TRANSFER;AC-0001;AC-0002;100001` -> 200 OP-0002 (L2298-L2301) "
       "y el destino queda en 100001 (L2302). Con titulares distintos el mismo "
       "monto -> 422 E506 (L2305-L2308) y la comparación es sensible a "
       "mayúsculas (`Lucia` vs `lucia` -> E506, L2317-L2320). La exención no "
-      "evita E507 por saldo (L2312-L2314) ni el bloqueo E510 por 3 fallos (L2315).",
+      "evita E507 por saldo (L2312-L2314) ni el bloqueo E510 por 3 fallos (L2315). "
+      "En v2 (límite 50000, CHG-INC-1) la exención no se volvió a probar.",
       [M(req_sub='TRANSFER;AC-0001;AC-0002;100001;9', status=200),
        M(req_sub='CONSULTA;AC-0002;11', resp_sub='"saldo":100001'),
        M(req_sub='TRANSFER;AC-0001;AC-0002;100001;9', status=422, resp_sub='E506'),
@@ -1015,19 +1061,22 @@ FACTS = [
     F("Errores", "ERR-E599",
       "503 `{\"error\":\"E599\",\"mensaje\":\"service halted\"}`: respuesta de "
       "TODO `/msg` después de `HALT;1` confirmado y hasta el siguiente reset "
-      "(L2272-L2276; vuelve a la normalidad en L2278).",
-      [M(status=503, resp_sub='E599')], lines=[2272, 2273, 2274, 2275, 2276]),
-
+      "(L2272-L2276; vuelve a la normalidad en L2278). Igual en v2 (L5687–L5691, "
+      "incluidos `PING;XX` L5688 y `NOTAS` L5691 en estado detenido).",
+      [M(status=503, resp_sub='E599')],
+      lines=[2272, 2273, 2274, 2275, 2276, 5687, 5688, 5689, 5690, 5691]),
     F("Comandos", "CMD-TRANSFER-12",
-      "Desbloqueo por depósito: con AC-0001 bloqueada tras 3 fallos (E507×3 -> "
-      "E510, L3665-L3668), un `DEPOSITO` exitoso a ESA cuenta la desbloquea y "
-      "reinicia el contador: las transferencias siguientes vuelven a 200 "
-      "(L3669-L3671) y hacen falta otros 3 fallos para bloquear de nuevo "
-      "(L3707-L3711). NO desbloquean: depósito a otra cuenta (L3679-L3680), "
-      "CONSULTA (L3688-L3689), transferencia entrante (L3699-L3700), DEPOSITO "
-      "inválido E303 (L3719-L3720) ni ANULA de una operación propia (L3730-L3731).",
-      [M(path='/__reset', status=200), M(req_sub='ALTA;', status=201),
-       M(req_sub='TRANSFER;AC-0001;AC-0002;1;', status=422, resp_sub='E507'),
+      "Desbloqueo por depósito (sección `probe-unblock`, v1): con AC-0001 "
+      "bloqueada tras 3 fallos (E507 x3 L3666–L3668 -> E510 L3669), un `DEPOSITO` "
+      "exitoso a ESA cuenta (L3670) la desbloquea y reinicia el contador: las "
+      "transferencias siguientes vuelven a 200 (L3671, L3672) y hacen falta "
+      "otros 3 fallos para bloquear de nuevo (depósito L3708, E507 x3 "
+      "L3709–L3711, E510 L3712). NO desbloquean: depósito a otra cuenta (L3680 "
+      "-> L3681 sigue E510), CONSULTA (L3689 -> L3690), transferencia entrante "
+      "(L3699 -> L3700), DEPOSITO inválido E303 (L3720 -> L3721) ni ANULA de "
+      "una operación propia (L3730 -> L3731). En v2 el mismo desbloqueo por "
+      "depósito se observa en L5790 (ver CHG-INC-3).",
+      [M(req_sub='TRANSFER;AC-0001;AC-0002;1;', status=422, resp_sub='E507'),
        M(req_sub='TRANSFER;AC-0001;AC-0002;1;', status=409, resp_sub='E510'),
        M(req_sub='TRANSFER;AC-0001;AC-0002;1;', status=200),
        M(req_sub='DEPOSITO;AC-0001;10;', status=200), M(req_sub='DEPOSITO;AC-0002;10;', status=200),
@@ -1035,18 +1084,24 @@ FACTS = [
        M(req_sub='TRANSFER;AC-0001;AC-0002;50;', status=409, resp_sub='E510'),
        M(req_sub='CONSULTA;AC-0001', status=200), M(req_sub='DEPOSITO;AC-0002;100;', status=200),
        M(req_sub='TRANSFER;AC-0002;AC-0001;5;', status=200), M(req_sub='DEPOSITO;AC-0001;0;', status=400, resp_sub='E303'),
-       M(req_sub='DEPOSITO;AC-0001;5;', status=200), M(req_sub='TRANSFER;AC-0001;AC-0002;100;', status=422, resp_sub='E507'),
        M(req_sub='TRANSFER;AC-0001;AC-0002;100;', status=409, resp_sub='E510'), M(req_sub='ANULA;OP-0001', status=200)],
-      lines=list(range(3663, 3732))),
+      lines=[3666, 3667, 3668, 3669, 3670, 3671, 3672, 3680, 3681, 3689, 3690,
+             3699, 3700, 3708, 3712, 3720, 3721, 3730, 3731]),
     F("Integridad", "INT-15",
-      "El plegado de mayúsculas del nombre del comando es SÓLO ASCII: `ping` y "
-      "`Ping` equivalen a PING (L3737, L3738) pero `pıng` (i sin punto), `PİNG`, "
-      "`ſalta` y `Kalta` (signo Kelvin) no se reconocen: con control inválido "
-      "dan E201 (L3733-L3736, L3739) y con control válido `pıng;60` da E301 con "
-      "sugerencia PING (L3531). Un uppercase Unicode los plegaría a PING/SALTA/KALTA.",
-      [M(status=400, resp_sub='E201'), M(req_sub='ping;XX', status=200), M(req_sub='Ping;XX', status=200),
-       M(status=400, resp_sub='"sugerencia":"PING"')],
-      lines=[3733, 3734, 3735, 3736, 3737, 3738, 3739, 3530, 3531]),
+      "El plegado de mayúsculas del nombre del comando es SÓLO ASCII. Se prueba "
+      "con PING porque está exento del control: `ping;XX` y `Ping;XX` -> 200 "
+      "pong (L3737, L3738), pero `pıng;XX` (i sin punto) y `PİNG;XX` (I con "
+      "punto) -> 400 E201 (L3733, L3734, L3739; también L3530): si el nombre se "
+      "hubiera plegado a PING, el control `XX` no se habría validado. Con "
+      "control válido, `pıng;60` -> E301 con sugerencia PING (L3531). Un "
+      "uppercase Unicode los plegaría a PING. (Las variantes `ſalta`/`Kalta` del "
+      "mismo sondeo no son separables: ALTA no está exenta del control y "
+      "`ALTA;XX` también daría E201, así que no se citan.)",
+      [M(section_sub='probe-fold', status=400, resp_sub='E201'),
+       M(req_sub='pıng;XX', status=400, resp_sub='E201'),
+       M(req_sub='ping;XX', status=200), M(req_sub='Ping;XX', status=200),
+       M(req_sub='pıng;60', status=400, resp_sub='"sugerencia":"PING"')],
+      lines=[3737, 3738, 3733, 3734, 3739, 3530, 3531]),
     F("Entrada", "IN-18",
       "Un cuerpo JSON válido grande con claves extra se procesa normalmente: "
       "`{\"m\":\"PING;XX\",\"p\":\"aaa…\"}` de 6000 y de exactamente 8192 bytes -> 200 "
@@ -1155,7 +1210,14 @@ FACTS = [
 # Log
 # ----------------------------------------------------------------------------
 def load_log():
+    """Load the log. Lines are cited by POSITION (1-based line number), which is
+    also the `id` of spec/experimentos.jsonl (export_log.py). The log's own `n`
+    counter collided 6 times when two clients appended concurrently, so it is
+    kept as `n_raw` and `n` is overwritten with the position."""
     rows = [json.loads(l) for l in open(LOG)]
+    for pos, r in enumerate(rows, 1):
+        r["n_raw"] = r.get("n")
+        r["n"] = pos
     return rows, {r["n"]: r for r in rows}
 
 
@@ -1401,22 +1463,50 @@ def find_battery_runs(rows, byn):
 
 
 def battery_runs_equal(rows, byn):
-    """Check that each battery re-run is identical to the baseline in
-    status and body. Return (runs, problems)."""
+    """Check the battery re-runs against the baseline (L198-L224).
+
+    v1 runs (start < V2_FROM) must be identical to the baseline step by step
+    (status and body). v2 runs (start >= V2_FROM) differ from the baseline by
+    design (the original changed at L5555): they must all differ from it in the
+    SAME steps and be identical among themselves at every step. Steps with
+    status 0 (no response: network error, not a behavior of the service) are
+    skipped and reported. Return (v1_runs, v2_runs, v2_ref, v2_diff_offsets,
+    net_errors, problems); v2_ref is the reset line of the reference v2 run.
+    """
     a, b = BATTERY_BASE
+    steps = b - a
     problems = []
     runs = find_battery_runs(rows, byn)
     if len(runs) < 2:
         problems.append("batería: se esperaban al menos 2 re-ejecuciones en el log")
-    for start, end in runs:
-        if start >= V2_FROM:  # the original changed to version 2 at L5555; battery runs after that differ by design
-            continue
-        for off in range(1, b - a + 1):
-            r0, r1 = byn[a + off], byn[start + off]
-            if (r0["res"].get("status") != r1["res"].get("status")
-                    or r0["res"].get("body") != r1["res"].get("body")):
+    v1 = [r for r in runs if r[0] < V2_FROM]
+    v2 = [r for r in runs if r[0] >= V2_FROM]
+
+    def resp(n):
+        return (byn[n]["res"].get("status"), byn[n]["res"].get("body"))
+
+    def net_err(n):
+        return byn[n]["res"].get("status") == 0
+
+    net_errors = []
+    for start, _ in v1:
+        for off in range(1, steps + 1):
+            if net_err(start + off):
+                net_errors.append(start + off)
+            elif resp(a + off) != resp(start + off):
                 problems.append(f"batería: L{a + off} != L{start + off}")
-    return runs, problems
+    v2_ref, v2_diff = None, []
+    if v2:
+        clean = [s for s, _ in v2 if not any(net_err(s + off) for off in range(1, steps + 1))]
+        v2_ref = clean[0] if clean else v2[0][0]
+        v2_diff = [off for off in range(1, steps + 1) if resp(a + off) != resp(v2_ref + off)]
+        for start, _ in v2:
+            for off in range(1, steps + 1):
+                if net_err(start + off):
+                    net_errors.append(start + off)
+                elif resp(v2_ref + off) != resp(start + off):
+                    problems.append(f"batería v2: L{v2_ref + off} != L{start + off}")
+    return v1, v2, v2_ref, v2_diff, net_errors, problems
 
 
 def lev(a, b):
@@ -1468,19 +1558,68 @@ def last_log_ts(rows):
     return rows[-1]["ts"][:5], rows[-1]["n"], rows[0]["ts"][:5]
 
 
-def sin_cambios_text(rows, byn, runs):
-    last_hhmm, last_n, first_hhmm = last_log_ts(rows)
+def fill_ts(text, byn):
+    """Replace `{TS:n}` by the HH:MM:SS and `{TS5:n}` by the HH:MM of log line n."""
+    text = re.sub(r"\{TS:(\d+)\}", lambda m: byn[int(m.group(1))]["ts"][:8], text)
+    return re.sub(r"\{TS5:(\d+)\}", lambda m: byn[int(m.group(1))]["ts"][:5], text)
+
+
+def sin_cambios_v1_text(rows, byn, v1_runs):
+    """CHG-0a: the v1 battery re-runs (before V2_FROM) are identical to the base."""
     a, b = BATTERY_BASE
-    lst = ", ".join(f"L{s + 1}–L{e} ({byn[s + 1]['ts'][:5]})" for s, e in runs)
-    return (f"Sin cambios detectados entre las {first_hhmm} (L1) y las {last_hhmm} "
-            f"(L{last_n}, último experimento registrado contra el original): la "
-            f"batería de 27 pasos grabada a las {byn[a + 1]['ts'][:5]} (L{a + 1}–L{b}) "
-            f"se re-ejecutó tras reset {len(runs)} veces ({lst}) con request, "
-            "status y cuerpo idénticos paso a paso (igualdad comprobada "
-            "automáticamente al generar este documento). El sondeo de 62 "
-            "nombres (L820–L881) y de aridad (L884–L889) coincide con lo "
-            "descrito en Comandos. El monitor sigue en marcha; este documento se "
-            "regenera desde el log.")
+    first_hhmm = rows[0]["ts"][:5]
+    last_v1 = byn[V2_FROM - 1]
+    rng = ", ".join(f"L{s + 1}–L{e}" for s, e in v1_runs)
+    last_round = byn[v1_runs[-1][0] + 1]["ts"][:5] if v1_runs else "—"
+    return (f"Versión 1, sin cambios entre las {first_hhmm} (L1) y las {last_v1['ts'][:8]} "
+            f"(L{V2_FROM - 1}, última respuesta de v1): la batería de 27 pasos grabada a las "
+            f"{byn[a + 1]['ts'][:5]} (L{a + 1}–L{b}) se re-ejecutó tras reset {len(v1_runs)} "
+            f"veces en v1 ({rng}; la última a las {last_round}) con request, status y cuerpo "
+            "idénticos paso a paso (igualdad comprobada automáticamente al generar este "
+            "documento). El sondeo de 62 nombres (L820–L881) y de aridad (L884–L889) coincide "
+            "con lo descrito en Comandos. Lo que cambió a partir de L5555 está en CHG-0b y "
+            "CHG-INC-1..4.")
+
+
+def cambios_v2_text(byn, v2_runs, v2_ref, v2_diff, net_errors, sondeo_v2):
+    """CHG-0b: the v2 battery re-runs differ from the base in the same steps and
+    agree among themselves. `sondeo_v2` = (n_lines, n_not_E301) of the v2 command
+    name probes (monitor-sondeo-cmds)."""
+    a, b = BATTERY_BASE
+    steps = b - a
+    rng = ", ".join(f"L{s + 1}–L{e}" for s, e in v2_runs)
+    pares = "; ".join(f"L{a + off} -> L{v2_ref + off}" for off in v2_diff)
+    txt = (f"Versión 2, desde la primera ronda posterior al cambio ({byn[v2_ref + 1]['ts'][:5]}, "
+           f"L{v2_ref + 1}–L{v2_ref + steps}): las {len(v2_runs)} rondas de la batería registradas "
+           f"contra v2 ({rng}) difieren de la línea base (L{a + 1}–L{b}) en los MISMOS "
+           f"{len(v2_diff)} pasos de {steps} — {pares} — y son idénticas entre sí en los {steps} "
+           f"pasos (igualdad comprobada automáticamente). Los otros {steps - len(v2_diff)} pasos "
+           "responden exactamente como en v1. Los tres cambios que explican las diferencias "
+           "(límite 50000, saldo como cadena con decimales, 423 con `intentos`) están en "
+           "CHG-INC-1..3; el contrato HTTP no cambió (L5694–L5697: /health 200 y 401, "
+           "/__reset 200, ruta inexistente 404).")
+    n_sond, n_bad = sondeo_v2
+    if n_sond and not n_bad:
+        txt += (f" El sondeo de nombres de comando en v2 ({n_sond} requests de "
+                "`monitor-sondeo-cmds` desde L5555) siguió dando E301 en todos.")
+    if net_errors:
+        txt += (f" Se descartan {len(net_errors)} pasos sin respuesta por error de red (status 0: "
+                + ", ".join(f"L{n}" for n in net_errors) + "), que no son respuestas del servicio.")
+    return txt
+
+
+def sondeo_v2_stats(rows):
+    """(n_lines, n_not_E301) over the v2 command-name probes of the monitor."""
+    n = bad = 0
+    for row in rows:
+        if row["n"] < V2_FROM or row.get("section") != "monitor-sondeo-cmds":
+            continue
+        if row["res"].get("status") == 0:
+            continue
+        n += 1
+        if '"E301"' not in (row["res"].get("body") or ""):
+            bad += 1
+    return n, bad
 
 
 # ----------------------------------------------------------------------------
@@ -1494,7 +1633,8 @@ def main():
     args = ap.parse_args()
 
     rows, byn = load_log()
-    runs, battery_problems = battery_runs_equal(rows, byn)
+    v1_runs, v2_runs, v2_ref, v2_diff, net_errors, battery_problems = battery_runs_equal(rows, byn)
+    sondeo_v2 = sondeo_v2_stats(rows)
     n_e301, sug_problems = check_sugerencias(rows)
 
     # resolve evidence and confidence
@@ -1506,8 +1646,13 @@ def main():
         if fid in seen_ids:
             bad_cites.append(f"{fid}: ID duplicado")
         seen_ids.add(fid)
-        if fid == "CHG-0":
-            lines = list(lines) + [n for s_, e_ in runs for n in (s_ + 1, e_)]
+        if fid == "CHG-0a":
+            lines = list(lines) + [n for s_, e_ in v1_runs for n in (s_ + 1, e_)]
+        if fid == "CHG-0b":
+            if not v2_runs:
+                continue  # no battery round recorded against v2 in this log
+            lines = ([v2_ref + off for off in v2_diff]
+                     + [v2_runs[-1][0] + 1, v2_runs[-1][1]])
         hits, total, problems = evidence_for(rows, byn, matchers, lines)
         for p in problems:
             bad_cites.append(f"{fid}: {p}")
@@ -1525,8 +1670,10 @@ def main():
             ev = "(inferido)"
         else:
             ev = "—"
-        if comp == "{SIN_CAMBIOS}":
-            comp = sin_cambios_text(rows, byn, runs)
+        if comp == "{SIN_CAMBIOS_V1}":
+            comp = sin_cambios_v1_text(rows, byn, v1_runs)
+        elif comp == "{CAMBIOS_V2}":
+            comp = cambios_v2_text(byn, v2_runs, v2_ref, v2_diff, net_errors, sondeo_v2)
         comp = comp.replace("{N_E301}", str(n_e301))
         resolved.append((sec, fid, comp, ev, conf, total, assume))
         if total == 0 and not assume and not conf_override:
@@ -1534,6 +1681,10 @@ def main():
 
     # incident (section 6)
     for fid, comp, lines, conf in INCIDENTE:
+        for ln in lines:  # cited lines must exist in the log
+            if byn.get(int(ln[1:])) is None:
+                bad_cites.append(f"{fid}: {ln} no existe en el log")
+        comp = fill_ts(comp, byn)
         ev = ", ".join(lines) if lines else "—"
         resolved.append(("Cambios durante el día", fid, comp, ev, conf, len(lines), False))
 
@@ -1560,6 +1711,15 @@ def main():
              "separable por contenido del log), **supuesto** (no probado; es lo "
              "que hace el reemplazo por defecto). Nada de lo que no esté en el "
              "log se afirma como confirmado.\n")
+    L.append("**Versiones.** El original cambió entre las "
+             f"{byn[V2_FROM - 1]['ts'][:8]} (L{V2_FROM - 1}, última respuesta de v1) y las "
+             f"{byn[V2_FROM]['ts'][:8]} (L{V2_FROM}, primer request contra v2); ver CHG-INC-4. "
+             "Las filas marcadas «v1 (hasta las 15:55)» describen un valor que cambió y "
+             "remiten a la fila CHG-INC-n con el valor v2 y sus líneas. Las filas sin marca "
+             f"no mostraron cambio en las {len(v2_runs)} rondas v2 de la batería "
+             f"(L{v2_ref + 1 if v2_ref else '—'}–L{v2_runs[-1][1] if v2_runs else '—'}; CHG-0b: "
+             f"{27 - len(v2_diff)} de 27 pasos idénticos) ni en los sondeos del monitor, o "
+             "indican que no se volvieron a probar en v2.\n")
 
     def table(rows_):
         L.append("\n| ID | Comportamiento | Evidencia | Confianza |")

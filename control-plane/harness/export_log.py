@@ -4,17 +4,31 @@
 Official format from the challenge statement: one line per request to the original with
   {id, seq, x_req, hipotesis, request, status, response, conclusion}
 where:
-  - id        = log line number (the `n` field).
+  - id        = line number of the export, unique. It equals the position of the
+                record in experiments/log.jsonl (1-based). The log's own `n`
+                counter collided 6 times when two clients appended concurrently
+                (n 6772, 6784, 6790, 6808, 6810, 6824 appear twice), so `n` is
+                NOT used as id; genspec.py cites lines by the same position, so
+                every `Lnn` of the spec is the `id` of the export.
   - seq       = the log section (the `section` field).
-  - x_req     = the X-Req header of the response (if any).
+  - x_req     = the X-Req header of the response (number when numeric, else
+                the raw string, null when the response carried none).
   - hipotesis = a readable sentence for the section, taken from the editable
                 map harness/hipotesis.json (one sentence per section). If the
-                section is missing, a proposal is added to the map.
-  - request   = the body sent to /msg ({"m": ...}); for /__reset and raw
-                requests it is described as {"metodo","ruta"} (+ body if any).
-  - status    = HTTP status of the original.
+                section is missing, a proposal is added to the map; a map entry
+                that is just the section name (boilerplate) is replaced by the
+                proposal as well.
+  - request   = the body sent to the original, exactly as the README shows it
+                ({"m": ...} for /msg). Raw string bodies that are valid JSON are
+                parsed; anything else (/__reset, /health, other routes, bodies
+                that are not JSON) is described as {"metodo","ruta"} (+ "body"
+                when one was sent). No extra keys are injected: the credential
+                used, when it was not the valid token, is stated in `conclusion`.
+  - status    = HTTP status of the original (0 = no response, network error).
   - response  = the original's body parsed as JSON (if it was) or string.
-  - conclusion= optional (empty by default; editable).
+  - conclusion= short sentence derived from status/response ("200 pong",
+                "422 E506 límite excedido", ...), plus the credential used when
+                it was not the valid token.
 
 Writes spec/experimentos.jsonl and (re)generates/updates harness/hipotesis.json.
 
@@ -31,6 +45,7 @@ CLI:
 import argparse
 import json
 import os
+import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -82,11 +97,37 @@ PROPOSALS = {
     "pending: reinicio del contador de bloqueo tras un éxito": "El contador de fallos del bloqueo se reinicia con una TRANSFER exitosa (bloqueo = 3 fallos consecutivos)",
     "pending: ¿límite acumulado? 3 transferencias de 60000 seguidas": "¿Límite acumulado de TRANSFER? 3 x 60000 seguidas: todas 200, sin tope acumulado",
     "pending: ¿tope de cuentas? crear 30 cuentas": "¿Tope de cuentas? 30 ALTA seguidas: todas 201 hasta AC-0030, sin tope",
+    # --- sections found by differential fuzzing / hidden run (14:55-15:20)
+    "hidden-run2": "Replay de lo que el evaluador envió en la ronda 2 (secuencias ocultas) contra el original para obtener la respuesta esperada de cada paso y corregir la réplica donde difería",
+    "probe-unblock": "Desbloqueo por depósito: ¿un DEPOSITO a la cuenta bloqueada la desbloquea y reinicia el contador? ¿y un depósito a otra cuenta, CONSULTA, transferencia entrante, DEPOSITO inválido o ANULA?",
+    "probe-fold": "Plegado de mayúsculas del nombre del comando: ¿es sólo ASCII? 'pıng' (i sin punto), 'PİNG', 'ſalta' y 'Kalta' (signo Kelvin) frente a 'ping'/'Ping'",
+    "probe-bigbody": "Cuerpo JSON grande con claves extra: ¿el límite de 8192 bytes es inclusivo y se procesa el m aunque haya otras claves?",
+    # --- 15:30 incident sweep (first requests against version 2 of the original)
+    "incidente-acumulado": "Incidente: ¿cambió el límite por operación o el bloqueo? Tres TRANSFER de 100000 seguidas y la cuarta, luego CONSULTA del saldo",
+    "incidente-muchas-cuentas": "Incidente: ¿cambió el formato o la numeración de los ids de cuenta al crear muchas cuentas?",
+    "incidente-muchas-ops": "Incidente: ¿cambió la numeración de OP o el formato del saldo tras muchos depósitos pequeños?",
+    "incidente-montos": "Incidente: ¿cambiaron las reglas de monto (máximo 9999999999, negativos, decimales, ceros a la izquierda) y el límite por operación?",
+    "incidente-nombres": "Incidente: ¿cambió la validación del nombre en ALTA (un carácter, dígitos, espacios, 80 caracteres, guion, minúsculas, vacío)?",
+    "incidente-saldo-exacto": "Incidente: formato exacto del saldo en CONSULTA tras depósitos y transferencias (¿entero o cadena con decimales?)",
+    "incidente-anula": "Incidente: ¿cambió la semántica de ANULA (reversión, 'ya anulada', OP inexistente u OP-0000) y el saldo resultante?",
+    "incidente-strikes": "Incidente: ¿cambiaron el umbral de bloqueo, qué fallos cuentan como strike (E401/E304/E303 no) y el reinicio tras una TRANSFER exitosa?",
+    "incidente-halt": "Incidente: ¿siguen igual NOTAS, HALT sin confirmar (409 E520) y HALT;1 (503 E599 hasta el reset)?",
+    "incidente-bisect": "Incidente: bisección sobre estado limpio del nuevo límite por operación (99999 … 50001 -> E506, 50000 -> 200), formato del saldo ('0.50', '-1.00') y contador 'intentos' del 423 (hasta 12; se reinicia al desbloquear por depósito)",
+    # --- fuzz probes recorded with a truncated English label
+    "fuzz-b1-probe:same-name accounts: is the per-operation limit e": "Cuentas del mismo titular (mismo nombre en ALTA): ¿están exentas del límite por operación? TRANSFER de 100001 entre dos 'Lucia'",
+    "fuzz-b1-probe:control: name X1 vs different name Mateo, over l": "Control: titulares distintos (X1 vs Mateo) con el mismo monto 100001 -> ¿E506? (la exención es sólo para el mismo nombre)",
+    "fuzz-b1-probe:same-name, balance 0, over limit x3: E507 and do": "Mismo titular con saldo 0 y monto sobre el límite x3: ¿E507 (la exención no evita saldo insuficiente) y bloqueo E510 al tercer fallo?",
+    "fuzz-b1-probe:same-name case-insensitive? Lucia vs lucia, over": "¿La exención de mismo titular distingue mayúsculas? 'Lucia' vs 'lucia' con 100001",
 }
+
+_FUZZ_RE = re.compile(r"^fuzz-b(\d+):fuzz (long|short) (\d+) steps \(seed (\d+)\)$")
+_FUZZ_SINGLE_RE = re.compile(r"^fuzz-b(\d+):fuzz single: (.*)$")
+_FUZZ_PROBE_RE = re.compile(r"^fuzz-b(\d+)-probe:(.*)$")
 
 
 def generic_proposal(s):
-    """Sentence for harness sections (single:/seq-*/replay:) with no map entry."""
+    """Sentence for harness sections (single:/seq-*/replay:/fuzz-b*/rerecord:)
+    with no map entry."""
     if s.startswith("single:"):
         return s[len("single:"):]
     if s.startswith("seq-short:gen "):
@@ -100,7 +141,30 @@ def generic_proposal(s):
     if s.startswith("replay:"):
         return (f"Re-ejecución contra el original de '{s[len('replay:'):]}' para "
                 "reconfirmar que las respuestas se repiten (verificación de la réplica)")
+    if s.startswith("rerecord:"):
+        return (f"Regrabación contra el original de la secuencia '{s[len('rerecord:'):]}' "
+                "(su primera grabación tuvo un error de red) para fijar la respuesta esperada")
+    m = _FUZZ_RE.match(s)
+    if m:
+        batch, kind, steps, seed = m.groups()
+        largo = "larga" if kind == "long" else "corta"
+        return (f"Secuencia aleatoria {largo} de {steps} pasos generada por el modelo "
+                f"del libro mayor (lote {batch}, semilla {seed}) para grabar la respuesta "
+                "del original y compararla con la réplica")
+    m = _FUZZ_SINGLE_RE.match(s)
+    if m:
+        batch, what = m.groups()
+        return (f"Request suelto de fuzzing (lote {batch}): {what}; se graba la respuesta "
+                "del original para compararla con la réplica")
+    m = _FUZZ_PROBE_RE.match(s)
+    if m:
+        batch, what = m.groups()
+        return f"Sonda dirigida tras el fuzzing (lote {batch}): {what}"
     return s or "(sin sección)"
+
+
+def proposal_for(section):
+    return PROPOSALS.get(section, generic_proposal(section))
 
 
 def load_map():
@@ -113,11 +177,15 @@ def load_map():
 
 
 def ensure_map(sections):
+    """Load the map, add missing sections and replace boilerplate entries
+    (sentence == section name) by the proposal. Hand-edited sentences are
+    kept."""
     m = load_map()
     changed = False
     for s in sections:
-        if s not in m:
-            m[s] = PROPOSALS.get(s, generic_proposal(s))
+        prop = proposal_for(s)
+        if s not in m or (m[s] == s and prop != s):
+            m[s] = prop
             changed = True
     if changed or not os.path.exists(HIP_MAP):
         with open(HIP_MAP, "w") as f:
@@ -126,20 +194,22 @@ def ensure_map(sections):
 
 
 def request_of(req):
-    """Derive the official `request` field from the log's req."""
+    """Derive the official `request` field from the log's req: the body sent,
+    as the README shows it ({"m": ...}). A raw string body that is valid JSON
+    is parsed; everything else is described with metodo/ruta (+ body)."""
     body = req.get("body")
     path = req.get("path")
     method = req.get("method")
     if path == "/msg" and isinstance(body, dict):
-        out = dict(body)
-    else:
-        out = {"metodo": method, "ruta": path}
-        if body is not None:
-            out["body"] = body
-    # credential used (none / lowercase-bearer / foreign-token / no-scheme /
-    # valid); only lines >= L1059 record it.
-    if req.get("auth_kind"):
-        out["auth"] = req["auth_kind"]
+        return dict(body)
+    if path == "/msg" and isinstance(body, str):
+        try:
+            return json.loads(body)
+        except ValueError:
+            pass
+    out = {"metodo": method, "ruta": path}
+    if body is not None:
+        out["body"] = body
     return out
 
 
@@ -149,6 +219,61 @@ def response_of(res):
         return json.loads(body)
     except (ValueError, TypeError):
         return body
+
+
+def x_req_of(res):
+    x = res.get("x_req")
+    if isinstance(x, str) and x.isdigit():
+        return int(x)
+    return x
+
+
+# Credential used, as recorded in the log (only lines >= L1059 record it).
+AUTH_TEXT = {
+    "none": "sin header Authorization",
+    "lowercase-bearer": "esquema 'bearer' en minúscula",
+    "foreign-token": "token de otro equipo",
+    "no-scheme": "token sin esquema Bearer",
+}
+
+
+def conclusion_of(req, res):
+    """Short sentence derived from status/response (what the original did)."""
+    status = res.get("status")
+    body = response_of(res)
+    if status == 0:
+        c = "sin respuesta (error de red / timeout), no es una respuesta del servicio"
+    elif isinstance(body, dict):
+        if "error" in body:
+            c = f"{status} {body['error']} {body.get('mensaje', '')}".rstrip()
+            if "sugerencia" in body:
+                c += f" (sugerencia {body['sugerencia']})"
+            if "intentos" in body:
+                c += f" (intentos {body['intentos']})"
+        elif "pong" in body:
+            c = f"{status} pong"
+        elif "cuentaId" in body:
+            c = f"{status} cuenta creada {body['cuentaId']}"
+        elif "operacionId" in body:
+            c = f"{status} {body.get('status', 'ok')} {body['operacionId']}"
+        elif "saldo" in body:
+            c = f"{status} saldo de {body.get('cuenta_id', '?')} = {json.dumps(body['saldo'])}"
+        elif "anulada" in body:
+            c = f"{status} anulada {body['anulada']}"
+        elif "motivo" in body:
+            c = f"{status} ok=false, motivo '{body['motivo']}'"
+        elif "notas" in body:
+            c = f"{status} lista de {len(body['notas'])} nota(s) con texto fijo"
+        elif body.get("ok") is True:
+            c = f"{status} ok"
+        else:
+            c = f"{status} {json.dumps(body, ensure_ascii=False)[:80]}"
+    else:
+        c = f"{status} {str(body)[:80]}" if body else f"{status} sin cuerpo"
+    kind = req.get("auth_kind")
+    if kind and kind != "valid":
+        c += f" (credencial: {AUTH_TEXT.get(kind, kind)})"
+    return c
 
 
 def main():
@@ -173,17 +298,17 @@ def main():
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     n = 0
     with open(args.out, "w") as f:
-        for r in rows:
+        for pos, r in enumerate(rows, 1):
             sec = r.get("section", "")
             rec = {
-                "id": r["n"],
+                "id": pos,  # line number of the export (== position in the log); unique
                 "seq": sec or "sin-seccion",
-                "x_req": r["res"].get("x_req"),
-                "hipotesis": hmap.get(sec, sec),
+                "x_req": x_req_of(r["res"]),
+                "hipotesis": hmap.get(sec) or proposal_for(sec),
                 "request": request_of(r["req"]),
                 "status": r["res"]["status"],
                 "response": response_of(r["res"]),
-                "conclusion": "",
+                "conclusion": conclusion_of(r["req"], r["res"]),
             }
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
             n += 1
