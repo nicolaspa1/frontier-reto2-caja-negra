@@ -64,3 +64,10 @@ replica/src/main/kotlin/cn/
 ## Deployment
 
 Single Railway instance, Dockerfile build, health check on an unguessable path, zero-overlap deploys. One instance is a deliberate choice: the evaluator resets state between tests and expects one consistent ledger; horizontal scaling would require shared state and buy nothing at 10 requests per second.
+
+## What the day taught us
+
+Four hidden rules surfaced after the first evaluation run, none of them guessable from a reasonable corpus: a confirmation value for `HALT` that halts the service until the next reset, an exemption from the transfer limit between accounts of the same holder, a successful deposit that unblocks a blocked account, and ASCII-only case folding of command names. Each one became a policy entry with cited evidence, a small rule function, a regenerated spec entry and a permanent regression case. Two honest refinements to the design:
+
+- **Values are data; mechanisms are code.** The policy decides which rules apply and with which values. A genuinely new mechanism (a halted state, an exemption) still needs a few lines in the rule registry. The architecture makes that cheap, not free.
+- **Discover by states, not only by values.** Curated and random cases found limits and texts; they missed state transitions. A systematic walk, every command from every known state, is the right first exploration. Equally, the evaluator talks to one shared ledger, so no other client may touch the replacement during a run; that isolation is now an explicit operating rule.
