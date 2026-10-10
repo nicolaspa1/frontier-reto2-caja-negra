@@ -21,7 +21,6 @@ class PolicyV2Test {
     private fun MsgPipeline.send(payload: String): Response = handle("""{"m":"$payload;${Iso7064.control(payload)}"}""")
     private fun operationId(r: Response): String = JsonObject(r.body).getString("operacionId")
 
-    /** AC-0001 (Lucia) funded with 1000000, AC-0002 (Mateo) empty. */
     private fun MsgPipeline.twoAccounts() {
         assertEquals("""{"cuentaId":"AC-0001"}""", send("ALTA;Lucia").body)
         assertEquals("""{"cuentaId":"AC-0002"}""", send("ALTA;Mateo").body)
@@ -30,24 +29,23 @@ class PolicyV2Test {
 
     @Test fun transferLimitIs50000Inclusive() {
         val h = pipeline(); h.twoAccounts()
-        assertEquals(200, h.send("TRANSFER;AC-0001;AC-0002;50000").status)                       // L5760
-        val over = h.send("TRANSFER;AC-0001;AC-0002;50001")                                       // L5559
+        assertEquals(200, h.send("TRANSFER;AC-0001;AC-0002;50000").status)
+        val over = h.send("TRANSFER;AC-0001;AC-0002;50001")
         assertEquals(422, over.status)
         assertEquals("""{"error":"E506","mensaje":"límite excedido"}""", over.body)
-        assertEquals(v2.error("E506"), h.send("TRANSFER;AC-0001;AC-0002;100000"))                 // L5560
+        assertEquals(v2.error("E506"), h.send("TRANSFER;AC-0001;AC-0002;100000"))
     }
 
     @Test fun blockedAccountAnswers423WithAttemptCounter() {
         val h = pipeline(); h.twoAccounts()
-        repeat(3) { assertEquals(422, h.send("TRANSFER;AC-0001;AC-0002;50001").status) }        // three E506 as origin
+        repeat(3) { assertEquals(422, h.send("TRANSFER;AC-0001;AC-0002;50001").status) }
         val first = h.send("TRANSFER;AC-0001;AC-0002;10")
-        assertEquals(423, first.status)                                                            // L5562
+        assertEquals(423, first.status)
         assertEquals("""{"error":"E510","mensaje":"cuenta bloqueada","intentos":1}""", first.body)
         assertEquals("""{"error":"E510","mensaje":"cuenta bloqueada","intentos":2}""", h.send("TRANSFER;AC-0001;AC-0002;10").body) // L5563
         // A successful deposit to the blocked account lifts the block (v1 rule, L3669-L3671) and clears the counter.
         assertEquals(200, h.send("DEPOSITO;AC-0001;1").status)
         assertEquals(200, h.send("TRANSFER;AC-0001;AC-0002;10").status)
-        // A new block starts counting again at 1.
         repeat(3) { assertEquals(422, h.send("TRANSFER;AC-0001;AC-0002;50001").status) }
         val again = h.send("TRANSFER;AC-0001;AC-0002;10")
         assertEquals(423, again.status)
@@ -60,7 +58,7 @@ class PolicyV2Test {
         repeat(22) { assertEquals(200, h.send("DEPOSITO;AC-0001;1").status) }
         val consulta = h.send("CONSULTA;AC-0001")
         assertEquals(200, consulta.status)
-        assertEquals("""{"cuenta_id":"AC-0001","saldo":"0.22"}""", consulta.body)                 // L5565
+        assertEquals("""{"cuenta_id":"AC-0001","saldo":"0.22"}""", consulta.body)
         // Annulling a deposit whose funds already left the account drives the balance negative: -100 -> "-1.00" (L5605).
         assertEquals("""{"cuentaId":"AC-0002"}""", h.send("ALTA;Mateo").body)
         val deposit = h.send("DEPOSITO;AC-0002;100")
@@ -69,7 +67,6 @@ class PolicyV2Test {
         assertEquals(200, h.send("ANULA;${operationId(deposit)}").status)
         assertEquals("""{"cuenta_id":"AC-0002","saldo":"-1.00"}""", h.send("CONSULTA;AC-0002").body)
         assertEquals("""{"cuenta_id":"AC-0002","saldo":"-1.00"}""", h.send("CONSULTA;AC-0002").body) // ANULA twice does not double it
-        // 1000000 -> "10000.00" (L5566 shape)
         assertEquals("""{"cuentaId":"AC-0003"}""", h.send("ALTA;Ana").body)
         assertEquals(200, h.send("DEPOSITO;AC-0003;1000000").status)
         assertEquals("""{"cuenta_id":"AC-0003","saldo":"10000.00"}""", h.send("CONSULTA;AC-0003").body)
@@ -90,10 +87,10 @@ class PolicyV2Test {
     @Test fun sameCodeWithPolicyV1AnswersAsVersion1() {
         val v1 = TestSupport.policyV1()
         val h = pipeline(v1); h.twoAccounts()
-        assertEquals(200, h.send("TRANSFER;AC-0001;AC-0002;100000").status)                      // L68-L71
+        assertEquals(200, h.send("TRANSFER;AC-0001;AC-0002;100000").status)
         repeat(3) { assertEquals(422, h.send("TRANSFER;AC-0001;AC-0002;100001").status) }
         val blocked = h.send("TRANSFER;AC-0001;AC-0002;10")
-        assertEquals(409, blocked.status)                                                          // L87
+        assertEquals(409, blocked.status)
         assertEquals("""{"error":"E510","mensaje":"cuenta bloqueada"}""", blocked.body)
         assertEquals("""{"cuenta_id":"AC-0002","saldo":100000}""", h.send("CONSULTA;AC-0002").body)
     }

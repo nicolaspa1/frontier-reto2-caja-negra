@@ -4,20 +4,15 @@ package cn.domain
 
 /** Context of a command that already passed the integrity checks (control, arity). */
 class CommandContext(val spec: CommandSpec, val args: List<String>, val ledger: Ledger, val policy: Policy) {
-    /** Argument carrying the given role, or null when the command has no such role. */
     fun arg(role: String): String? = spec.args.indexOf(role).takeIf { it >= 0 }?.let { args[it] }
-    /** All arguments whose role is one of [roles], in positional order. */
     fun argsWithRole(vararg roles: String): List<String> = spec.args.withIndex().filter { it.value in roles }.map { args[it.index] }
-    /** Amount already validated by `MontoValido` (null when the command has no amount). */
     var amount: Long? = null
-    /** Fee set by the latent `Comision` rule (0 by default). */
     var fee: Long = 0
 }
 
 /** A business rule returns the error code that stops the pipeline, or null to let it continue. */
 fun interface Rule { fun check(ctx: CommandContext): String? }
 
-/** Hook that runs after a successful effect (must not fail). */
 fun interface PostRule { fun after(ctx: CommandContext, op: Operation?) }
 
 object RuleRegistry {
@@ -32,7 +27,6 @@ object RuleRegistry {
             if (v < ctx.policy.limits.amountMin || v > ctx.policy.limits.amountMax) return@Rule "E303"
             ctx.amount = v; null
         },
-        // L102, L145
         "OrigenDestinoDistintos" to Rule { ctx -> if (ctx.arg("origen") == ctx.arg("destino")) "E304" else null },
         // Every referenced account (cuenta, origen, destino) must exist. L16, L48, L104, L106
         "CuentaExiste" to Rule { ctx -> if (ctx.argsWithRole("cuenta", "origen", "destino").any { ctx.ledger.account(it) == null }) "E401" else null },
@@ -50,15 +44,12 @@ object RuleRegistry {
             }
             if ((ctx.amount ?: 0) > ctx.policy.limits.transferMax) "E506" else null
         },
-        // L17, L136
         "SaldoSuficiente" to Rule { ctx ->
             val acc = ctx.arg("origen")?.let(ctx.ledger::account) ?: return@Rule null
             if (acc.balance < (ctx.amount ?: 0) + ctx.fee) "E507" else null
         },
-        // L119
         "OperacionExiste" to Rule { ctx -> if (ctx.arg("operacion")?.let(ctx.ledger::operation) == null) "E402" else null },
 
-        // ---- Latent rules: implemented but not listed in policy-v1 ----
         // Accumulated outgoing-transfer cap per account (limits.accumulatedTransferMax).
         "LimiteAcumulado" to Rule { ctx ->
             val max = ctx.policy.limits.accumulatedTransferMax ?: return@Rule null

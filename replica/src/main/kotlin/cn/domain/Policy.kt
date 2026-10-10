@@ -11,7 +11,6 @@ data class ResponseSpec(val status: Int, val body: String) {
     }
 }
 
-/** Sequential id format, e.g. prefix `AC-` and width 4 -> `AC-0001`. Wider numbers simply grow. */
 data class IdSpec(val prefix: String, val width: Int) {
     fun format(n: Long) = prefix + n.toString().padStart(width, '0')
 }
@@ -22,15 +21,10 @@ data class StrikeSpec(val role: String, val errors: Set<String>)
 data class CommandSpec(
     val name: String,
     val arity: Int,
-    /** Role of each positional argument (policy data: `cuenta`, `monto`, `origen`, `destino`, `operacion`, `nombre`). */
     val args: List<String>,
-    /** Ordered business rules, resolved by name through [RuleRegistry]. */
     val rules: List<String>,
-    /** Hooks run after a successful effect, resolved through [RuleRegistry.postRule]. */
     val postRules: List<String>,
-    /** Ledger effect implemented in [MsgPipeline] (`ping`, `static`, `alta`, `consulta`, `deposito`, `transfer`, `anula`). */
     val effect: String,
-    /** Key into `policy.responses` for the success body. */
     val response: String,
     val failureStrikes: StrikeSpec?,
 )
@@ -68,12 +62,11 @@ data class HttpSpec(
     val bodyTooLargeError: String = "E101",
 )
 
-/** Message syntax parameters (`policy.integrity`). */
 data class ParserSpec(
     val separator: String = ";",
     val trim: Boolean = false,
-    val commandCase: String = "insensitive",   // insensitive | sensitive
-    val controlPosition: String = "last",      // last | first
+    val commandCase: String = "insensitive",
+    val controlPosition: String = "last",
 )
 
 /** E301 carries a `sugerencia` when the command is within [maxDistance] (Levenshtein) of a candidate. */
@@ -86,7 +79,7 @@ data class Policy(
     val integrityOrder: List<String>,
     val controlFormat: Regex,
     val controlAlgorithm: ControlAlgorithm,
-    val controlCompare: String = "canonical-string",   // canonical-string | numeric
+    val controlCompare: String = "canonical-string",
     val suggestion: SuggestionSpec?,
     val controlExempt: Set<String>,
     val accountId: IdSpec,
@@ -97,11 +90,9 @@ data class Policy(
     val errors: Map<String, ResponseSpec>,
     val halt: HaltSpec? = null,
 ) {
-    /** Renders the error [code]; throws if the policy does not define it (validated at load time by PolicyLoader). */
     fun error(code: String, vars: Map<String, Any> = emptyMap()): Response =
         (errors[code] ?: throw IllegalStateException("policy $version: error $code is not defined")).render(vars)
 
-    /** Renders the success response [key]; throws if the policy does not define it. */
     fun response(key: String, vars: Map<String, Any> = emptyMap()): Response =
         (responses[key] ?: throw IllegalStateException("policy $version: response $key is not defined")).render(vars)
 }

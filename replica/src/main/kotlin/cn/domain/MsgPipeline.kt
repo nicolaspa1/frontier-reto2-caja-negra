@@ -5,7 +5,6 @@ package cn.domain
  * Pure Kotlin; the only state is the [Ledger].
  */
 
-/** Syntactic split of the message. Every accessor is total: a message without separator never throws. */
 class ParsedMessage(raw: String, val spec: ParserSpec) {
     val raw: String = if (spec.trim) raw.trim() else raw
     val parts: List<String> = this.raw.split(spec.separator)
@@ -18,7 +17,6 @@ class ParsedMessage(raw: String, val spec: ParserSpec) {
         controlFirst -> parts.drop(2)
         else -> parts.subList(1, parts.size - 1)
     }
-    /** Message without the control field: what the control algorithm verifies. */
     val payload: String get() = when {
         !hasControl -> this.raw
         controlFirst -> this.raw.substring(this.raw.indexOf(spec.separator) + spec.separator.length)
@@ -35,14 +33,12 @@ object IntegrityRegistry {
         "SegmentoVacio" to IntegrityRule { m, _ -> if (m.parts.any { it.isEmpty() }) "E104" else null },
         // policy.integrity.controlFormat (1-2 ASCII digits): "+5", "014", "123" -> E201 (L731-L733)
         "ControlMalFormado" to IntegrityRule { m, p -> if (m.command in p.controlExempt || p.controlFormat.matches(m.control)) null else "E201" },
-        // Strategy from policy.integrity.controlAlgorithm (iso7064-mod97-10 | permissive | fit)
         "ControlInvalido" to IntegrityRule { m, p ->
             if (m.command in p.controlExempt) return@IntegrityRule null
             // Canonical text comparison: "03" -> E202 even though 3 is the right value (L1070, L730)
             if (p.controlAlgorithm.accepts(m.payload, m.control, p.controlCompare)) null else "E202"
         },
         "ComandoDesconocido" to IntegrityRule { m, p -> if (m.command in p.commands) null else "E301" },
-        // unknown command is left to ComandoDesconocido, whatever the policy order
         "Aridad" to IntegrityRule { m, p -> p.commands[m.command]?.let { if (it.arity != m.args.size) "E302" else null } },
     )
     fun rule(name: String) = rules[name] ?: error("Unknown integrity rule in policy: $name")
@@ -111,7 +107,6 @@ class MsgPipeline(val policy: Policy, private val codec: JsonCodec) : MessageHan
         ctx.arg(s.role)?.let(ledger::account)?.let { it.strikes++ }
     }
 
-    /** Applies the ledger effect named by the command spec. Arguments were validated by the command's rules. */
     private fun apply(ctx: CommandContext): Pair<Response, Operation?> = when (ctx.spec.effect) {
         // Fixed response, ledger untouched: PING, HALT (409 E520, L894), NOTAS (L896).
         "ping", "static" -> {

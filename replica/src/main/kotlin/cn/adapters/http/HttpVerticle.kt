@@ -32,7 +32,6 @@ class HttpVerticle(
     override fun start(startPromise: Promise<Void>) {
         val router = Router.router(vertx)
         router.route().handler(::dispatch)
-        // Statuses Vert.x Web may produce on its own (no matching route for "*" paths, bad request line, handler exception).
         router.errorHandler(404) { it.replyOnce(policy.error(policy.http.unknownRouteError)) }
         router.errorHandler(400) { it.replyOnce(policy.error("E100")) }
         router.errorHandler(500) { it.replyOnce(policy.error("E100")) }
@@ -47,7 +46,6 @@ class HttpVerticle(
             .end(Buffer.buffer(r.body.toByteArray(Charsets.UTF_8)))
     }
 
-    /** Reply unless something already answered this request (error handlers may run after a partial write). */
     private fun RoutingContext.replyOnce(r: Response) { if (!response().ended() && !response().headWritten()) reply(r) }
 
     private fun authed(req: HttpServerRequest) = req.getHeader("Authorization") == policy.http.authScheme + token
@@ -92,21 +90,18 @@ class HttpVerticle(
         }
         req.endHandler { finish { if (received > http.bodyMaxBytes) ctx.reply(tooLarge) else onBody(body) } }
         req.exceptionHandler { finish { ctx.reply(policy.error("E100")) } }
-        req.resume()   // no-op unless an upstream handler paused the stream
+        req.resume()
     }
 
-    /** Runs [block] on the event loop; if it throws, answer E100 rather than leaving the request hanging. */
     private fun safely(ctx: RoutingContext, block: () -> Unit) {
         try { block() } catch (e: Exception) { ctx.replyOnce(policy.error("E100")) } catch (e: StackOverflowError) { ctx.replyOnce(policy.error("E100")) }
     }
 
-    /** Domain call guard: an exception (or a stack overflow on pathological input) becomes E100, never a 5xx. */
     private fun guarded(block: () -> Response): Response =
         try { block() } catch (e: Exception) { policy.error("E100") } catch (e: StackOverflowError) { policy.error("E100") }
 
     companion object {
         const val DEFAULT_HEALTH_PATH = "/__up-k7f3a9c2"
-        /** Above this many bytes (declared or streamed) the request is rejected without reading the rest. */
         const val HARD_BODY_CAP = 1_000_000L
     }
 }

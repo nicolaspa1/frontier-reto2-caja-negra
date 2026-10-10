@@ -47,7 +47,7 @@ class ParametrizedPolicyTest {
     @Test fun pipeSeparator() {
         val h = pipeline("""{"integrity": {"separator": {"value": "|"}}}""")
         assertEquals(201, h.handle("""{"m":"ALTA|Lucia|${Iso7064.control("ALTA|Lucia")}"}""").status)
-        assertEquals(400, h.handle("""{"m":"ALTA;Lucia;82"}""").status)        // no '|' -> E103
+        assertEquals(400, h.handle("""{"m":"ALTA;Lucia;82"}""").status)
         assertEquals("""{"error":"E103"}""", h.handle("""{"m":"ALTA;Lucia;82"}""").body)
         assertEquals("""{"error":"E104"}""", h.handle("""{"m":"ALTA||5"}""").body)
     }
@@ -60,7 +60,7 @@ class ParametrizedPolicyTest {
 
     @Test fun permissiveControl() {
         val h = pipeline("""{"integrity": {"controlAlgorithm": {"value": {"name": "permissive"}}}}""")
-        assertEquals(201, h.handle("""{"m":"ALTA;Lucia;00"}""").status)           // never E202
+        assertEquals(201, h.handle("""{"m":"ALTA;Lucia;00"}""").status)
         assertEquals("""{"error":"E201"}""", h.handle("""{"m":"ALTA;Lucia;123"}""").body) // controlFormat still applies
         val strict = pipeline("{}")
         assertEquals("""{"error":"E202"}""", strict.handle("""{"m":"ALTA;Lucia;00"}""").body)
@@ -79,7 +79,6 @@ class ParametrizedPolicyTest {
         assertTrue(real.isFile, "missing ${real.absolutePath}: run `python3 control-plane/harness/fit.py fit` (the test must not be skipped silently)")
         val algo = ControlAlgorithms.from(mapOf("name" to "fit", "file" to real.absolutePath))
         if (JsonObject(real.readText(Charsets.UTF_8)).getString("familia") == "permissive") {
-            // no candidate found by fit.py: degraded mode, only the permissive semantics can be checked
             println("WARNING: control-plane/harness/control-fit.json is in permissive mode; fit.py must treat '03' as a canonical-format rejection, not a value mismatch")
             assertEquals(null, algo.expected("ALTA;Lucia"))
             return
@@ -88,11 +87,9 @@ class ParametrizedPolicyTest {
         assertEquals(14, algo.expected("CONSULTA;AC-0001"))
         assertEquals(64, algo.expected("PING"))
         assertEquals(4, algo.expected("DEPOSITO;AC-0001;999999999999"))
-        // the whole policy with controlAlgorithm {"name":"fit"} still reproduces the corpus
         val h = pipeline("""{"integrity": {"controlAlgorithm": {"value": {"name": "fit", "file": "${real.absolutePath.replace("\\", "/")}"}}}}""")
         assertEquals(201, h.handle("""{"m":"ALTA;Lucia;82"}""").status)
         assertEquals("""{"error":"E202"}""", h.handle("""{"m":"ALTA;Lucia;83"}""").body)
-        // inline (POLICY_JSON): the contents of control-fit.json pasted under controlAlgorithm with name=fit
         val inline = JsonObject(real.readText(Charsets.UTF_8)).put("name", "fit")
         val h2 = pipeline("""{"integrity": {"controlAlgorithm": {"value": ${inline.encode()}}}}""")
         assertEquals(201, h2.handle("""{"m":"ALTA;Lucia;82"}""").status)
@@ -104,7 +101,6 @@ class ParametrizedPolicyTest {
         val algo = ControlAlgorithms.fromFitJson(spec)
         val expected = 98 - "ALTALUCIA".toByteArray().sumOf { it.toInt() } % 97
         assertEquals(expected, algo.expected("ALTA;Lucia"))
-        // same tables as fit.py for the check digits
         assertEquals(3, cn.domain.CheckDigits.luhn("7992739871"))
         assertEquals(4, cn.domain.CheckDigits.damm("572"))
         assertEquals(3, cn.domain.CheckDigits.verhoeff("236"))
@@ -125,8 +121,8 @@ class ParametrizedPolicyTest {
                 return client.send(b.build(), HttpResponse.BodyHandlers.ofString())
             }
             assertEquals(200, post("/mensaje", "Token t").statusCode())
-            assertEquals(404, post("/msg", "Token t").statusCode())          // the old route no longer exists
-            assertEquals(401, post("/mensaje", "Bearer t").statusCode())    // scheme changed by config
+            assertEquals(404, post("/msg", "Token t").statusCode())
+            assertEquals(401, post("/mensaje", "Bearer t").statusCode())
             assertEquals(404, post("/__up-k7f3a9c2", null).statusCode())
         } finally { vertx.close().toCompletionStage().toCompletableFuture().get(5, TimeUnit.SECONDS) }
     }

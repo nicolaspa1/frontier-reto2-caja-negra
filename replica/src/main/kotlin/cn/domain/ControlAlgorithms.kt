@@ -24,12 +24,11 @@ interface ControlAlgorithm {
 
 object PermissiveControl : ControlAlgorithm { override fun expected(payload: String): Int? = null }
 
-/** Turns the payload into a digit string according to the alphabet and filters. */
 class DigitMapper(val alphabet: String = "a1", val dropNonAlnum: Boolean = true, val dropNonAscii: Boolean = true, val caseFold: Boolean = true) {
     fun letterValue(ch: Char): String? {
         val upper = ch in 'A'..'Z'; val lower = ch in 'a'..'z'
         if (!upper && !lower) return null
-        if (lower && !caseFold && alphabet != "ascii") return null          // no case folding: lowercase is outside the alphabet
+        if (lower && !caseFold && alphabet != "ascii") return null
         val idx = if (upper) ch - 'A' else ch - 'a'
         return when (alphabet) {
             "a1" -> (idx + 1).toString()
@@ -100,7 +99,7 @@ class FitControl(val p: Map<String, Any?>) : ControlAlgorithm {
                     "a10" -> sb.append(if (o in 65..90) (o - 55).toString() else ch.code.toString())
                     else -> sb.append(ch.code.toString())
                 }
-            } else sb.append(ch.code.toString())   // kept separator or mapped non-ASCII -> code point
+            } else sb.append(ch.code.toString())
         }
         return sb.toString()
     }
@@ -160,7 +159,6 @@ object CheckDigits {
 }
 
 object ControlAlgorithms {
-    /** Builds the strategy from the policy.integrity.controlAlgorithm object (already converted to a Map). */
     fun from(spec: Map<String, Any?>): ControlAlgorithm = when (val name = (spec["name"] as String?)?.lowercase() ?: "iso7064-mod97-10") {
         "iso7064-mod97-10", "iso7064" -> iso7064(spec)
         "permissive" -> PermissiveControl
@@ -178,9 +176,7 @@ object ControlAlgorithms {
 
     private fun iso7064(p: Map<String, Any?>) = Iso7064Control(mapper(p), p["suffix"] as String? ?: "00", num(p, "modulus", 97), num(p, "base", 98))
 
-    /** harness/control-fit.json as written by fit.py: {"familia", "params", "verificado_sobre", "formula_texto"}. */
     fun fit(spec: Map<String, Any?>): ControlAlgorithm {
-        // inline form (POLICY_JSON): the contents of control-fit.json under {"name":"fit", ...}
         if (spec["params"] != null) {
             val params = spec["params"].let { if (it is io.vertx.core.json.JsonObject) it.map else @Suppress("UNCHECKED_CAST") (it as Map<String, Any?>) }
             return if (spec["familia"] == "permissive") PermissiveControl else FitControl(params)
