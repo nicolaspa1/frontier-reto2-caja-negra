@@ -117,7 +117,7 @@ INCIDENTE = [
     ("CHG-INC-1", "Qué cambió (1/3): el límite por transferencia bajó de 100000 a 50000, inclusivo: `TRANSFER;AC-0001;AC-0002;50000` -> 200 (L5760, L5821) y 50001 (L5820), 99999 (L5759) o 100000 (L5559, L5560, L5561; L5712 en la batería) -> 422 E506. Bisección sobre estado limpio en la sección `incidente-bisect` (74999, 62499 y 56249 -> E506, L5801–L5803). En v1, 100000 -> 200 (L68, L11; CMD-TRANSFER-2).", ["L5760", "L5821", "L5820", "L5759", "L5559", "L5560", "L5561", "L5712", "L5801", "L5802", "L5803"], "confirmado"),
     ("CHG-INC-2", "Qué cambió (2/3): `CONSULTA` devuelve el saldo como CADENA con dos decimales, siendo la unidad la centésima del monto almacenado: 22 depósitos de 1 -> `\"saldo\":\"0.22\"` (L5605); depósito de 1000000 -> `\"10000.00\"` (L5565); cuenta sin movimientos -> `\"0.00\"` (L5566, L5580, L5706); 2 x 9999999999 -> `\"199999999.98\"` (L5612); 150 depositados menos 100 transferidos -> `\"0.50\"` (L5778); saldo negativo tras ANULA -> `\"-1.00\"` (L5780). En v1 era un entero (`\"saldo\":0` en L205 frente a `\"0.00\"` en L5706, mismo paso de la batería; CMD-CONSULTA-1).", ["L5605", "L5565", "L5566", "L5580", "L5706", "L5612", "L5778", "L5780", "L205"], "confirmado"),
     ("CHG-INC-3", "Qué cambió (3/3): la cuenta bloqueada responde 423 (antes 409) y el cuerpo añade `intentos`, el número de intentos rechazados desde el bloqueo: `{\"error\":\"E510\",\"mensaje\":\"cuenta bloqueada\",\"intentos\":1}`, luego 2, 3 (L5562, L5563, L5564; L5660, L5717) y hasta 12 observados (L5804–L5815). El umbral sigue siendo 3 fallos E506/E507 consecutivos como origen y una TRANSFER exitosa sigue reiniciando los strikes (L5674, L5675 dos E507; L5676 depósito; L5677 -> 200; L5678–L5680 tres E507; L5681 -> 423 intentos 1). El desbloqueo por depósito a la cuenta bloqueada (CMD-TRANSFER-12) se mantiene y reinicia `intentos`: E507 x3 (L5785–L5787) -> 423 intentos 1, 2 (L5788, L5789); `DEPOSITO;AC-0001;5` (L5790) -> las transferencias vuelven a evaluarse (E507 en L5791–L5793) y el nuevo bloqueo empieza otra vez en intentos 1 (L5794) y 2 (L5796).", ["L5562", "L5563", "L5564", "L5660", "L5717", "L5804", "L5815", "L5674", "L5677", "L5681", "L5788", "L5789", "L5790", "L5791", "L5794", "L5796"], "confirmado"),
-    ("CHG-INC-4", "Desde cuándo y cómo se detectó: ticket FR-0153 abierto a las 15:30. Ventana real del cambio: entre las {TS:5554} (L5554, última respuesta de v1: la ronda del monitor de las {TS5:5527}, L5527–L5554, aún idéntica a la base) y las {TS:5555} (L5555/L5556, primer request del barrido `incidente-*`, ya v2: L5559 100000 -> E506). El header X-Req pasó de 4544 (L5554) a 1 (L5556): el original se redesplegó en esa ventana. La ronda del monitor de las {TS5:5699} marcó 10 alertas en la batería (L5706, L5712, L5717, L5719…; detalle en CHG-0b). Antes, el replay del corpus completo (427 pasos, 15:45) y de los lotes de fuzzing (871 pasos, 15:53; L3899–L5522) contra el original no mostró diferencias: el cambio no ocurrió a las 15:30 sino en esa ventana. Adaptación: `rules/policy-v2.json` con los tres valores y sus citas; el mismo jar la carga con `POLICY=v2`; verificación por replay del corpus regrabado en v2 y por los tests de fidelidad sobre el log partido en v1/v2 (L5555).", ["L5527", "L5554", "L5555", "L5556", "L5559", "L5706", "L5712", "L5717", "L5719"], "confirmado"),
+    ("CHG-INC-4", "Desde cuándo y cómo se detectó: ticket FR-0153 abierto a las 15:30. Ventana real del cambio: entre las {TS:5554} (L5554, última respuesta de v1: la ronda del monitor de las {TS5:5527}, L5527–L5554, aún idéntica a la base) y las {TS:5555} (L5555/L5556, primer request del barrido `incidente-*`, ya v2: L5559 100000 -> E506). El header X-Req pasó de 4544 (L5554) a 1 (L5556): el original se redesplegó en esa ventana. La ronda del monitor de las {TS5:5699} marcó 10 alertas en la batería (L5706, L5712, L5717, L5719…; detalle en CHG-0b). Antes, el replay del corpus completo (425 pasos, 15:45) y de los lotes de fuzzing (871 pasos, 15:53; L4408–L5522) contra el original no mostró diferencias: el cambio no ocurrió a las 15:30 sino en esa ventana. Adaptación: `rules/policy-v2.json` con los tres valores y sus citas; el mismo jar la carga con `POLICY=v2`; verificación por replay del corpus regrabado en v2 y por los tests de fidelidad sobre el log partido en v1/v2 (L5555).", ["L5527", "L5554", "L5555", "L5556", "L5559", "L5706", "L5712", "L5717", "L5719"], "confirmado"),
 ]
 
 
@@ -581,7 +581,7 @@ FACTS = [
       "`HALT;<arg>;<control>` (comando oculto, descubierto por la sugerencia de "
       "E301, L843/L900) -> 409 `{\"error\":\"E520\",\"mensaje\":\"operación "
       "destructiva: detiene el servicio; reenvía con confirmación\"}` (L894, "
-      "repetible L903). El reemplazo responde SIEMPRE este 409.",
+      "repetible L903). El reemplazo responde este 409 salvo con el valor de confirmación `1` (CMD-HALT-5).",
       [M(resp_sub='E520')], lines=[894, 903]),
     F("Comandos", "CMD-HALT-2",
       "Aridad 1: `HALT;71` (0 args) y `HALT;AC-0001;1;32` (2 args) -> 400 E302 "
@@ -599,12 +599,11 @@ FACTS = [
        M(req_m='DEPOSITO;AC-0001;10;77', resp_sub='OP-0002')],
       lines=[902, 904, 905]),
     F("Comandos", "CMD-HALT-4",
-      "La 'confirmación' que pide E520 NO se exploró (riesgo de detener el "
-      "servicio original; ver RSK-2). El reemplazo no implementa ninguna forma "
-      "de confirmación: cualquier HALT de aridad 1 -> 409 E520. Tampoco se "
-      "comprobó si el argumento debe ser una cuenta existente (se asume que no "
-      "se valida).",
-      [], assume=True),
+      "El argumento de HALT no se valida como cuenta: `HALT;AC-9999;<control>` "
+      "(cuenta inexistente) responde el mismo 409 E520 (L1350, L2616, L5217). "
+      "La confirmación se exploró una sola vez y a propósito en la tarde: ver "
+      "CMD-HALT-5 (el valor `1` detiene el servicio hasta el reset).",
+      [M(req_sub='HALT;AC-9999', status=409, resp_sub='E520')], lines=[1350, 2616, 5217]),
     # --- NOTAS (oculto)
     F("Comandos", "CMD-NOTAS-1",
       "`NOTAS;<control>` (comando oculto) -> 200 `{\"notas\":[{\"id\":\"N-01\","
@@ -1118,10 +1117,11 @@ FACTS = [
       [M(resp_sub='"saldo":-60000')], lines=[130, 543]),
     F("Riesgos", "RSK-2",
       "HALT es un comando oculto DESTRUCTIVO ('detiene el servicio') al alcance "
-      "de cualquier token (L894, L903); su confirmación no se exploró a "
-      "propósito. Cierre: no exponer operaciones administrativas por el canal "
-      "de negocio; si hace falta, ruta separada con credencial distinta y "
-      "doble confirmación auditada. El reemplazo sólo devuelve el 409.",
+      "de cualquier token (L894, L903); con la confirmación `1` detiene de "
+      "verdad el servicio hasta el siguiente reset (CMD-HALT-5, L2272). Cierre: "
+      "no exponer operaciones administrativas por el canal de negocio; si hace "
+      "falta, ruta separada con credencial distinta y doble confirmación "
+      "auditada. El reemplazo reproduce el 409 y el estado detenido sólo por fidelidad.",
       [M(resp_sub='E520')], lines=[894, 903]),
     F("Riesgos", "RSK-3",
       "El texto de NOTAS (L896) contiene una INSTRUCCIÓN dirigida al lector "
