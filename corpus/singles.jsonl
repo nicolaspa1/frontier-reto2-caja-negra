@@ -1,0 +1,43 @@
+{"case_id": "single-01", "hipotesis": "PING responde pong con control válido", "steps": [{"m": "PING;64", "status": 200, "body": "{\"pong\":true}"}]}
+{"case_id": "single-02", "hipotesis": "PING sin control -> E103 falta control", "steps": [{"m": "PING", "status": 400, "body": "{\"error\":\"E103\",\"mensaje\":\"falta control\"}"}]}
+{"case_id": "single-03", "hipotesis": "PING; (segmento de control vacío) -> E104/E103", "steps": [{"m": "PING;", "status": 400, "body": "{\"error\":\"E104\",\"mensaje\":\"segmento vacío\"}"}]}
+{"case_id": "single-04", "hipotesis": "PING con aridad 1 -> E302", "steps": [{"m": "PING;64;64", "status": 400, "body": "{\"error\":\"E302\",\"mensaje\":\"aridad inválida\"}"}]}
+{"case_id": "single-05", "hipotesis": "PING;XX: PING no valida el valor del control -> pong", "steps": [{"m": "PING;XX", "status": 200, "body": "{\"pong\":true}"}]}
+{"case_id": "single-06", "hipotesis": "ping en minúscula: comando case-insensitive -> pong", "steps": [{"m": "ping;64", "status": 200, "body": "{\"pong\":true}"}]}
+{"case_id": "single-07", "hipotesis": "ALTA crea cuenta AC-0001", "steps": [{"m": "ALTA;Lucia;82", "status": 201, "body": "{\"cuentaId\":\"AC-0001\"}"}]}
+{"case_id": "single-08", "hipotesis": "ALTA con 2 args -> E302 aridad inválida", "steps": [{"m": "ALTA;Lucia;Gomez;11", "status": 400, "body": "{\"error\":\"E302\",\"mensaje\":\"aridad inválida\"}"}]}
+{"case_id": "single-09", "hipotesis": "ALTA con nombre vacío -> E104 segmento vacío", "steps": [{"m": "ALTA;;85", "status": 400, "body": "{\"error\":\"E104\",\"mensaje\":\"segmento vacío\"}"}]}
+{"case_id": "single-10", "hipotesis": "ALTA con nombre solo dígitos -> 201", "steps": [{"m": "ALTA;12345;14", "status": 201, "body": "{\"cuentaId\":\"AC-0001\"}"}]}
+{"case_id": "single-11", "hipotesis": "CONSULTA de cuenta inexistente -> E401", "steps": [{"m": "CONSULTA;AC-0001;14", "status": 404, "body": "{\"error\":\"E401\",\"mensaje\":\"cuenta inexistente\"}"}]}
+{"case_id": "single-12", "hipotesis": "CONSULTA id minúsculas (case-sensitive) -> E401", "steps": [{"m": "CONSULTA;ac-0001;14", "status": 404, "body": "{\"error\":\"E401\",\"mensaje\":\"cuenta inexistente\"}"}]}
+{"case_id": "single-13", "hipotesis": "CONSULTA id sin zero-pad -> E401", "steps": [{"m": "CONSULTA;AC-1;5", "status": 404, "body": "{\"error\":\"E401\",\"mensaje\":\"cuenta inexistente\"}"}]}
+{"case_id": "single-14", "hipotesis": "CONSULTA aridad 0 -> E302", "steps": [{"m": "CONSULTA;11", "status": 400, "body": "{\"error\":\"E302\",\"mensaje\":\"aridad inválida\"}"}]}
+{"case_id": "single-15", "hipotesis": "DEPOSITO a cuenta inexistente (monto válido) -> E401", "steps": [{"m": "DEPOSITO;AC-0001;100;82", "status": 404, "body": "{\"error\":\"E401\",\"mensaje\":\"cuenta inexistente\"}"}]}
+{"case_id": "single-16", "hipotesis": "DEPOSITO monto 0 -> E303 (monto antes que cuenta)", "steps": [{"m": "DEPOSITO;AC-0001;0;31", "status": 400, "body": "{\"error\":\"E303\",\"mensaje\":\"monto inválido\"}"}]}
+{"case_id": "single-17", "hipotesis": "DEPOSITO monto negativo -> E303", "steps": [{"m": "DEPOSITO;AC-0001;-5;16", "status": 400, "body": "{\"error\":\"E303\",\"mensaje\":\"monto inválido\"}"}]}
+{"case_id": "single-18", "hipotesis": "DEPOSITO monto decimal -> E303", "steps": [{"m": "DEPOSITO;AC-0001;1.5;62", "status": 400, "body": "{\"error\":\"E303\",\"mensaje\":\"monto inválido\"}"}]}
+{"case_id": "single-19", "hipotesis": "DEPOSITO monto no numérico -> E303", "steps": [{"m": "DEPOSITO;AC-0001;abc;13", "status": 400, "body": "{\"error\":\"E303\",\"mensaje\":\"monto inválido\"}"}]}
+{"case_id": "single-20", "hipotesis": "DEPOSITO con ceros a la izquierda -> E303", "steps": [{"m": "DEPOSITO;AC-0001;0100;19", "status": 400, "body": "{\"error\":\"E303\",\"mensaje\":\"monto inválido\"}"}]}
+{"case_id": "single-21", "hipotesis": "DEPOSITO >= 1e10 -> E303", "steps": [{"m": "DEPOSITO;AC-0001;10000000000;63", "status": 400, "body": "{\"error\":\"E303\",\"mensaje\":\"monto inválido\"}"}]}
+{"case_id": "single-22", "hipotesis": "DEPOSITO aridad 1 -> E302", "steps": [{"m": "DEPOSITO;AC-0001;4", "status": 400, "body": "{\"error\":\"E302\",\"mensaje\":\"aridad inválida\"}"}]}
+{"case_id": "single-23", "hipotesis": "TRANSFER entre cuentas inexistentes -> E401", "steps": [{"m": "TRANSFER;AC-0001;AC-0002;100;24", "status": 404, "body": "{\"error\":\"E401\",\"mensaje\":\"cuenta inexistente\"}"}]}
+{"case_id": "single-24", "hipotesis": "TRANSFER origen=destino -> E304", "steps": [{"m": "TRANSFER;AC-0001;AC-0001;100;17", "status": 400, "body": "{\"error\":\"E304\",\"mensaje\":\"origen y destino iguales\"}"}]}
+{"case_id": "single-25", "hipotesis": "TRANSFER monto inválido 0 -> E303 (antes que E304/E401)", "steps": [{"m": "TRANSFER;AC-0001;AC-0002;0;44", "status": 400, "body": "{\"error\":\"E303\",\"mensaje\":\"monto inválido\"}"}]}
+{"case_id": "single-26", "hipotesis": "TRANSFER aridad 2 -> E302", "steps": [{"m": "TRANSFER;AC-0001;AC-0002;15", "status": 400, "body": "{\"error\":\"E302\",\"mensaje\":\"aridad inválida\"}"}]}
+{"case_id": "single-27", "hipotesis": "ANULA operación inexistente -> E402", "steps": [{"m": "ANULA;OP-0001;72", "status": 404, "body": "{\"error\":\"E402\",\"mensaje\":\"operación inexistente\"}"}]}
+{"case_id": "single-28", "hipotesis": "ANULA aridad 0 -> E302", "steps": [{"m": "ANULA;45", "status": 400, "body": "{\"error\":\"E302\",\"mensaje\":\"aridad inválida\"}"}]}
+{"case_id": "single-29", "hipotesis": "Comando desconocido SALDOS -> E301 (espacio final)", "steps": [{"m": "SALDOS;AC-0001;38", "status": 400, "body": "{\"error\":\"E301\",\"mensaje\":\"comando desconocido \"}"}]}
+{"case_id": "single-30", "hipotesis": "Comando desconocido RETIRO -> E301", "steps": [{"m": "RETIRO;83", "status": 400, "body": "{\"error\":\"E301\",\"mensaje\":\"comando desconocido \"}"}]}
+{"case_id": "single-31", "hipotesis": "Control no numérico 'XX' -> E201 antes que comando desconocido", "steps": [{"m": "NOEXISTE;XX", "status": 400, "body": "{\"error\":\"E201\",\"mensaje\":\"control mal formado\"}"}]}
+{"case_id": "single-32", "hipotesis": "Control numérico incorrecto -> E202", "steps": [{"m": "ALTA;Lucia;83", "status": 400, "body": "{\"error\":\"E202\",\"mensaje\":\"control inválido\"}"}]}
+{"case_id": "single-33", "hipotesis": "Control con una letra '5X' -> E201", "steps": [{"m": "PING;5X", "status": 200, "body": "{\"pong\":true}"}]}
+{"case_id": "single-34", "hipotesis": "Body JSON inválido -> E100", "steps": [{"raw": {"method": "POST", "path": "/msg", "body": "{"}, "status": 400, "body": "{\"error\":\"E100\",\"mensaje\":\"json inválido\"}"}]}
+{"case_id": "single-35", "hipotesis": "Body JSON sin m -> E102", "steps": [{"raw": {"method": "POST", "path": "/msg", "body": "{}"}, "status": 400, "body": "{\"error\":\"E102\",\"mensaje\":\"falta m\"}"}]}
+{"case_id": "single-36", "hipotesis": "m vacío -> E103 falta control", "steps": [{"m": "", "status": 400, "body": "{\"error\":\"E103\",\"mensaje\":\"falta control\"}"}]}
+{"case_id": "single-37", "hipotesis": "Body array -> E102 falta m", "steps": [{"raw": {"method": "POST", "path": "/msg", "body": "[]"}, "status": 400, "body": "{\"error\":\"E102\",\"mensaje\":\"falta m\"}"}]}
+{"case_id": "single-38", "hipotesis": "m no string (123) -> E102", "steps": [{"raw": {"method": "POST", "path": "/msg", "body": "{\"m\":123}"}, "status": 400, "body": "{\"error\":\"E102\",\"mensaje\":\"falta m\"}"}]}
+{"case_id": "single-39", "hipotesis": "Mensaje sin ';' (solo texto) -> E103 falta control", "steps": [{"m": "HOLA", "status": 400, "body": "{\"error\":\"E103\",\"mensaje\":\"falta control\"}"}]}
+{"case_id": "single-40", "hipotesis": "GET /health con token -> 200 {\"ok\":true}", "steps": [{"raw": {"method": "GET", "path": "/health"}, "status": 200, "body": "{\"ok\":true}"}]}
+{"case_id": "single-41", "hipotesis": "Ruta desconocida -> E404", "steps": [{"raw": {"method": "GET", "path": "/nope"}, "status": 404, "body": "{\"error\":\"E404\",\"mensaje\":\"ruta desconocida\"}"}]}
+{"case_id": "single-42", "hipotesis": "Método incorrecto en ruta conocida (POST /health) -> E404", "steps": [{"raw": {"method": "POST", "path": "/health"}, "status": 404, "body": "{\"error\":\"E404\",\"mensaje\":\"ruta desconocida\"}"}]}
+{"case_id": "single-43", "hipotesis": "Comando en minúscula deposito -> E401 (case-insensitive)", "steps": [{"m": "deposito;AC-0001;100;82", "status": 404, "body": "{\"error\":\"E401\",\"mensaje\":\"cuenta inexistente\"}"}]}
