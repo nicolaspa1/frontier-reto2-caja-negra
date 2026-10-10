@@ -977,6 +977,40 @@ FACTS = [
       lines=[820, 881, 884, 889, 963, 964, 965, 966, 995, 996, 997, 998]),
 
     # =============================== Risks ==================================
+    # --- Hidden rules found by differential fuzzing (14:55-15:12)
+    F("Comandos", "CMD-HALT-5",
+      "`HALT;1;<control>` SÍ confirma: el original responde 503 "
+      "`{\"error\":\"E599\",\"mensaje\":\"service halted\"}` (L2272) y a partir de "
+      "ahí TODO `/msg` responde el mismo 503 (ALTA L2274, DEPOSITO L2275, "
+      "TRANSFER L2273/L2276) hasta el siguiente `POST /__reset` (L2277), tras el "
+      "cual el servicio vuelve a operar (L2278). Sólo se ha observado el valor "
+      "`1` como confirmación; `AC-0001`, `OP-0001`, `no`, `x` siguen en 409 E520 "
+      "(CMD-HALT-1). El reemplazo mantiene el estado detenido hasta el reset.",
+      [M(req_sub='HALT;1;19', status=503, resp_sub='E599'),
+       M(req_sub='ALTA;Ana;50', status=503, resp_sub='E599'),
+       M(req_sub='DEPOSITO;AC-0003;80000;97', status=503, resp_sub='E599'),
+       M(path='/__reset', status=200), M(req_sub='ALTA;Lu;4', status=201), M(req_sub='TRANSFER;', status=503, resp_sub='E599')],
+      lines=[2272, 2273, 2274, 2275, 2276, 2277, 2278]),
+    F("Comandos", "CMD-TRANSFER-11",
+      "Transferencias entre cuentas del MISMO titular (mismo nombre exacto en "
+      "ALTA) están exentas del límite por operación: `ALTA;Lucia`×2, depósito "
+      "500000 y `TRANSFER;AC-0001;AC-0002;100001` -> 200 OP-0002 (L2298-L2301) "
+      "y el destino queda en 100001 (L2302). Con titulares distintos el mismo "
+      "monto -> 422 E506 (L2305-L2308) y la comparación es sensible a "
+      "mayúsculas (`Lucia` vs `lucia` -> E506, L2317-L2320). La exención no "
+      "evita E507 por saldo (L2312-L2314) ni el bloqueo E510 por 3 fallos (L2315).",
+      [M(req_sub='TRANSFER;AC-0001;AC-0002;100001;9', status=200),
+       M(req_sub='CONSULTA;AC-0002;11', resp_sub='"saldo":100001'),
+       M(req_sub='TRANSFER;AC-0001;AC-0002;100001;9', status=422, resp_sub='E506'),
+       M(req_sub='TRANSFER;AC-0001;AC-0002;100001;9', status=422, resp_sub='E507'),
+       M(req_sub='ALTA;lucia;82', status=201), M(req_sub='ALTA;Lucia;82', status=201), M(req_sub='ALTA;X1;52', status=201), M(req_sub='ALTA;Mateo;3', status=201), M(req_sub='DEPOSITO;AC-0001;500000;90', status=200), M(req_sub='TRANSFER;AC-0001;AC-0002;100000;12', status=200), M(req_sub='TRANSFER;AC-0001;AC-0002;1;41', status=409)],
+      lines=[2298, 2299, 2300, 2301, 2302, 2303, 2305, 2306, 2307, 2308, 2310, 2311, 2312, 2313, 2314, 2315, 2317, 2318, 2319, 2320]),
+    F("Errores", "ERR-E599",
+      "503 `{\"error\":\"E599\",\"mensaje\":\"service halted\"}`: respuesta de "
+      "TODO `/msg` después de `HALT;1` confirmado y hasta el siguiente reset "
+      "(L2272-L2276; vuelve a la normalidad en L2278).",
+      [M(status=503, resp_sub='E599')], lines=[2272, 2273, 2274, 2275, 2276]),
+
     F("Riesgos", "RSK-1",
       "ANULA revierte incondicionalmente y puede dejar saldos NEGATIVOS (L130, "
       "L543). Cierre: rechazar la anulación (o encolarla) si el destino no "
@@ -1060,6 +1094,15 @@ FACTS = [
       "comandos y aridades son valores que un cliente puede ver variar de una "
       "hora a otra. Cierre: no fijarlos en código; en el reemplazo son "
       "configuración y el monitor (CHG-1) los vigila.",
+      [], assume=True),
+    F("Riesgos", "RSK-13",
+      "Un comando oculto (`HALT;1`) detiene el servicio para todos los "
+      "clientes con una confirmación trivial y sin autorización adicional; "
+      "sólo `POST /__reset` lo recupera (CMD-HALT-5). Un cliente nuevo no "
+      "debería heredar un apagado remoto por mensaje. Cierre: en el reemplazo "
+      "se reproduce únicamente por fidelidad (estado en memoria que el reset "
+      "limpia); en una API nueva se retira el comando o se exige un rol "
+      "administrativo y un canal distinto a `/msg`.",
       [], assume=True),
 ]
 
