@@ -6,8 +6,8 @@
 > are never translated.
 
 Replacement service in Kotlin 2.4 + Vert.x Web 5.1 (lightweight hexagonal architecture). It answers byte for byte
-like the original for everything verified in `../control-plane/experiments/log.jsonl` (6959 lines at the last commit;
-`DomainFidelity` 5153/5153, `HttpFidelity` 6308/6308 in the tests, version 1 and version 2) and in the corpus
+like the original for everything verified in `../control-plane/experiments/log.jsonl` (more than 7200 lines at the last regeneration, growing while the monitor runs;
+`DomainFidelity` 5990/5990, `HttpFidelity` 7229/7229 at that point, version 1 and version 2) and in the corpus
 `../control-plane/corpus/*.jsonl` plus the run-2 sequences (720/720 steps with `control-plane/harness/replay.py`). The rules
 are data (`../rules/policy-v1.json`, `../rules/policy-v2.json`); the code only knows how to interpret them, and the same jar
 serves both versions (`POLICY=v1|v2`).
