@@ -57,7 +57,7 @@ sys.path.insert(0, HERE)
 import compare  # noqa: E402
 
 DEFAULT_LOG = os.path.join(ROOT, "experiments", "log.jsonl")
-DEFAULT_POLICY = os.path.join(ROOT, "rules", "policy-v1.json")
+DEFAULT_POLICY = os.path.join(os.path.dirname(ROOT), "rules", "policy-v1.json")
 DEFAULT_OUT_EXTRACT = os.path.join(HERE, "templates-extracted.json")
 
 PLACEHOLDER_RE = re.compile(r"\$\{([^}]+)\}")

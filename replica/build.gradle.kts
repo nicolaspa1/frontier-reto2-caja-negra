@@ -33,7 +33,7 @@ tasks.processResources { dependsOn(syncRules) }
 tasks.test {
     useJUnitPlatform()
     jvmArgs("-Dfile.encoding=UTF-8")
-    systemProperty("log.path", rootDir.resolve("../experiments/log.jsonl").absolutePath)
+    systemProperty("log.path", rootDir.resolve("../control-plane/experiments/log.jsonl").absolutePath)
     testLogging { events("failed"); showStandardStreams = true; exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 }
 

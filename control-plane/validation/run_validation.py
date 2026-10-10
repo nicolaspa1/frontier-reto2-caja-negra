@@ -23,7 +23,7 @@ import compare as C  # noqa: E402
 
 
 def read_token():
-    for line in open(os.path.join(ROOT, ".env")):
+    for line in open(os.path.join(os.path.dirname(ROOT), ".env")):  # .env lives at the repository root
         line = line.strip()
         if line.startswith("TEAM_TOKEN="):
             return line.split("=", 1)[1].strip().strip('"').strip("'")

@@ -473,3 +473,11 @@
 2026-10-10 14:41:38 [battery] OK (27 steps equal)
 2026-10-10 14:41:38 [latency] p50=280.8ms p99=525.4ms max=525.4ms slow>5s=0 5xx=0 infra=0 req=32 steps=31 equal=31 alerts=0
 2026-10-10 14:41:38 [metrics] harness/metrics.jsonl <- steps=31 equal=31 alerts=0
+2026-10-10 14:46:50 === round 1 (short) gasto diario original=977/8000 (12%); corrida=0 ===
+2026-10-10 14:46:52 [contract] OK (4 H/B checks equal)
+2026-10-10 14:47:09 [monitor] done. requests spent: 12; gasto diario original=989/8000 (12%); corrida=12
+2026-10-10 14:47:47 === round 1 (short) gasto diario original=989/8000 (12%); corrida=0 ===
+2026-10-10 14:47:48 [contract] OK (4 H/B checks equal)
+2026-10-10 14:47:56 [battery] OK (27 steps equal)
+2026-10-10 14:47:56 [latency] p50=286.6ms p99=606.9ms max=606.9ms slow>5s=0 5xx=0 infra=0 req=32 steps=31 equal=31 alerts=0
+2026-10-10 14:47:56 [metrics] harness/metrics.jsonl <- steps=31 equal=31 alerts=0

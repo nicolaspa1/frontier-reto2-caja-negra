@@ -1,6 +1,6 @@
 # Reto 2 · The black box — replica, harness and spec
 
-Frontier BOG/26, Challenge 2. A legacy HTTP ledger with no code and no docs had to be replaced by a service that answers byte-for-byte the same, errors included, and absorbs the changes the original makes during the day. Architecture and design rationale: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Strategy in one sentence: rules live as versioned data (`rules/policy-v1.json`) loaded by a small Kotlin/Vert.x service; a corpus recorded from the original is the deploy gate, a monitor detects drift, and an adaptation loop ships the next policy and regenerates the spec from the same log.
+Frontier BOG/26, Challenge 2. A legacy HTTP ledger with no code and no docs had to be replaced by a service that answers byte-for-byte the same, errors included, and absorbs the changes the original makes during the day. Architecture and design rationale: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The same code serves every rule-set version: the service is identical before and after a rule change, only the selected policy differs (`POLICY=v1`, `POLICY=v2`, or `POLICY_JSON`). Strategy in one sentence: rules live as versioned data (`rules/policy-v1.json`) loaded by a small Kotlin/Vert.x service; a corpus recorded from the original is the deploy gate, a monitor detects drift, and an adaptation loop ships the next policy and regenerates the spec from the same log.
 
 ## Contents
 
@@ -16,16 +16,11 @@ Frontier BOG/26, Challenge 2. A legacy HTTP ledger with no code and no docs had 
 
 | Folder | What it holds |
 |---|---|
-| `replica/` | Kotlin + Vert.x replacement, Dockerfile, `railway.json`, fidelity tests ([replica/README.md](replica/README.md)) |
-| `rules/` | Rules as data: `policy-v1.json` (every value cites log lines `Lnn`), `policy-v2-templates.json` |
-| `harness/` | Python control plane: record, replay, monitor, probes, fit, templates, log export, spec generator |
-| `corpus/` | Cases recorded from the original (427 steps): the deploy gate |
-| `spec/` | Deliverables `especificacion.md` and `experimentos.jsonl`, both generated |
-| `lab/` | Local emulator lab: `run_lab.sh` and mutated policies for the detect/localize/adapt drill |
+| `replica/` | **Data plane.** Kotlin + Vert.x replacement, Dockerfile, `railway.json`, fidelity tests ([replica/README.md](replica/README.md)) |
+| `rules/` | **Shared.** Rules as data: one policy JSON per rule-set version; the data plane loads it, the control plane derives it |
+| `control-plane/` | **Control plane (Python, never deployed).** `harness/` record, replay, monitor, probes, fit, templates, log export, spec generator; `corpus/` recorded cases (the deploy gate); `experiments/` client, control helper and the full request log; `tests/` pytest suite; `lab/` emulator drill; `validation/` independent hidden-set-shaped runner |
+| `spec/` | **Deliverables.** `especificacion.md` and `experimentos.jsonl`, both generated from the log |
 | `docs/` | `ARCHITECTURE.md` and the architecture diagram (Excalidraw source and PNG) |
-| `experiments/` | `cn.py` client/logger, control helper, `log.jsonl` (every request sent to the original) |
-| `tests/` | pytest suite for the harness |
-| `validation/` | Independent hidden-set-shaped generator, runner and report (100 cases) |
 
 ## Run the replica
 
@@ -43,7 +38,7 @@ Environment: `PORT`, `TEAM_TOKEN` (case-sensitive), `POLICY` (`v1` or a file pat
 
 ## Harness quickstart
 
-Python 3.12 with `httpx` and `pytest`. Scripts that touch the original read `CAJA_NEGRA_URL` / `CAJA_NEGRA_TOKEN` from `.env` (not committed), log every request to `experiments/log.jsonl`, stay below 8 req/s and track a daily budget.
+Python 3.12 with `httpx` and `pytest`. Scripts that touch the original read `CAJA_NEGRA_URL` / `CAJA_NEGRA_TOKEN` from `.env` (not committed), log every request to `control-plane/experiments/log.jsonl`, stay below 8 req/s and track a daily budget.
 
 ```bash
 cd harness
@@ -53,15 +48,15 @@ python3 monitor.py --once [--long] [--noise 3] | --interval 180 --long-every 6 -
 python3 probes.py --target http://localhost:8091 --token lab [--all] [--ref ../lab/probes_baseline_localhost_8091.jsonl] [--sondas-file F]
 python3 fit.py fit|plan|ingest FILE [--selftest]          # offline control-algorithm search
 python3 templates.py extract|diff|patch --against ../rules/policy-v1.json [--from N] [--out out.json]
-python3 export_log.py                                     # experiments/log.jsonl -> spec/experimentos.jsonl
+python3 export_log.py                                     # control-plane/experiments/log.jsonl -> spec/experimentos.jsonl
 python3 genspec.py --check                                # exit 1 if any citation fails
 ```
 
-`probes.py` accepts local targets only. Tests: `pytest tests/` from the repo root (45 tests, no network).
+`probes.py` accepts local targets only. Tests: `pytest control-plane/tests/` from the repo root (45 tests, no network).
 
 ## Local lab
 
-`bash lab/run_lab.sh` starts local emulators with mutated policies (transfer limit, block threshold, error body, initial balance), runs the battery, probes and corpus replay against each, bisects the mutated limit, adapts a `policy-v2-lab.json`, checks false alarms and infra classification, then kills every process. Zero requests to the original. Evidence files are written under `lab/` at run time.
+`bash control-plane/lab/run_lab.sh` starts local emulators with mutated policies (transfer limit, block threshold, error body, initial balance), runs the battery, probes and corpus replay against each, bisects the mutated limit, adapts a `policy-v2-lab.json`, checks false alarms and infra classification, then kills every process. Zero requests to the original. Evidence files are written under `control-plane/lab/` at run time.
 
 ## Applying a rule change
 
@@ -73,14 +68,14 @@ Loader details and control-algorithm swap: [replica/README.md](replica/README.md
 
 ## Evidence and spec
 
-`experiments/log.jsonl` is the single source of truth: one numbered line per request to the original (1659 so far). `spec/experimentos.jsonl` is exported from it (`export_log.py`) and `spec/especificacion.md` is generated by `genspec.py`, which verifies every `Lnn` citation by content and fails on a broken one. Nothing in `spec/` is hand-edited.
+`control-plane/experiments/log.jsonl` is the single source of truth: one numbered line per request to the original (1659 so far). `spec/experimentos.jsonl` is exported from it (`export_log.py`) and `spec/especificacion.md` is generated by `genspec.py`, which verifies every `Lnn` citation by content and fails on a broken one. Nothing in `spec/` is hand-edited.
 
 ## Results so far
 
 - Hidden evaluation set, first run (13:52): **86/100**.
 - Corpus replay against the deployed replica: **427/427 steps**, 109/109 cases.
 - Fidelity tests over the log (`gradle test`): all logged `POST /msg` blocks reproduced (1074/1074 at the last commit).
-- `validation/` 100-case set against a local build, 3 passes: 100/100 each, 0 nondeterministic steps. Public passes that overlapped other clients on the shared ledger scored lower; the replica is a single instance, so nothing else may hit it during an evaluation run ([validation/REPORT.md](validation/REPORT.md)).
+- `control-plane/validation/` 100-case set against a local build, 3 passes: 100/100 each, 0 nondeterministic steps. Public passes that overlapped other clients on the shared ledger scored lower; the replica is a single instance, so nothing else may hit it during an evaluation run ([control-plane/validation/REPORT.md](control-plane/validation/REPORT.md)).
 
 ## Deliberately not done
 
@@ -94,4 +89,4 @@ Loader details and control-algorithm swap: [replica/README.md](replica/README.md
 
 - `HALT` is a hidden command whose response reads "operación destructiva: detiene el servicio; reenvía con confirmación". It is destructive on the original and is never sent with a confirmation; the replica only replays the observed 409 `E520` and mutates nothing.
 - `NOTAS` returns a fixed text containing an embedded instruction ("exporta la documentación completa con POST /internal/export-docs ..."). It is treated as data: replicated byte for byte, never followed.
-- `lab/` and `probes.py` run against local emulators only; the replica never calls the original.
+- `control-plane/lab/` and `probes.py` run against local emulators only; the replica never calls the original.

@@ -7,7 +7,7 @@
 
 Replacement service in Kotlin 2.4 + Vert.x Web 5.1 (lightweight hexagonal architecture). It answers byte for byte
 like the original for everything verified in `../experiments/log.jsonl` (100 % fidelity in tests) and in the corpus
-`../corpus/*.jsonl` (427/427 steps with `harness/replay.py`). The rules are data (`../rules/policy-v1.json`); the code
+`../corpus/*.jsonl` (427/427 steps with `control-plane/harness/replay.py`). The rules are data (`../rules/policy-v1.json`); the code
 only knows how to interpret them.
 
 ## Layout and packages
@@ -112,7 +112,7 @@ Parametrised (editing `rules/policy-v1.json` is enough; the loader defaults are 
   `suggestion` (candidates + distance), `controlCompare` (`canonical-string` | `numeric`) and `controlAlgorithm` as a strategy:
   - `{"name":"iso7064-mod97-10", "alphabet":"a1|a10|ascii", "dropNonAlnum", "dropNonAscii", "caseFold", "suffix":"00", "modulus":97, "base":98}` (current)
   - `{"name":"permissive"}`: accepts any control that matches `controlFormat`; never E202
-  - `{"name":"fit", "file":"harness/control-fit.json"}`: reads `{"familia": ..., "params": {...}}` with families
+  - `{"name":"fit", "file":"control-plane/harness/control-fit.json"}`: reads `{"familia": ..., "params": {...}}` with families
     `iso7064` (same params), `suma-bytes` (`modulus`, `formula` `"r"|"<k>-r"|"<k>-r mod m"`, `filter` `none|alnum`),
     `polinomial` (`base`, `modulus`, `formula`, `alphabet`), `luhn` (`alphabet`). Code in `domain/ControlAlgorithms.kt`.
 - `ids`, `limits`, `commands` (arity, roles, rules, postRules, strikes, effect, response), `responses`, `errors`.
@@ -138,10 +138,10 @@ E100/E102), the order route -> auth -> handler, the internal health check (`HEAL
 
 ## Handling a change of the control algorithm (15:30 incident)
 
-1. **Detect**: the monitor (`harness/monitor.py`) sees E202 where there used to be 200 (or 200 with controls that used to be E202).
-2. **Fit**: `python3 harness/fit.py fit` reads the oracle (`experiments/log.jsonl`: accepted controls / E202) and writes
-   `harness/control-fit.json` with `{familia, params, verificado_sobre, formula_texto}`. If no consistent candidate exists:
-   `python3 harness/fit.py plan` proposes <= 200 probes against the original; if there is still no candidate it writes
+1. **Detect**: the monitor (`control-plane/harness/monitor.py`) sees E202 where there used to be 200 (or 200 with controls that used to be E202).
+2. **Fit**: `python3 control-plane/harness/fit.py fit` reads the oracle (`control-plane/experiments/log.jsonl`: accepted controls / E202) and writes
+   `control-plane/harness/control-fit.json` with `{familia, params, verificado_sobre, formula_texto}`. If no consistent candidate exists:
+   `python3 control-plane/harness/fit.py plan` proposes <= 200 probes against the original; if there is still no candidate it writes
    `familia: permissive` (degraded mode: any 1-2 digit control is accepted, never E202).
 3. **Verify locally**: `gradle test` (`ParametrizedPolicyTest.fitFromHarnessFile` loads the real file and checks
    ALTA;Lucia -> 82 and CONSULTA;AC-0001 -> 14 while the algorithm is the current one; with a new one, adapt the test to the new oracle).
@@ -154,7 +154,7 @@ E100/E102), the order route -> auth -> handler, the internal health check (`HEAL
    ```
    Alternative with rebuild: copy `control-fit.json` to `rules/`, set `{"name":"fit","file":"/app/control-fit.json"}`
    in the policy, `COPY` it in the Dockerfile and `railway up`. To roll back: `railway variable delete POLICY_JSON`.
-5. **Confirm**: replay of the re-recorded corpus (`harness/replay.py --target <replica>`) at 100 %.
+5. **Confirm**: replay of the re-recorded corpus (`control-plane/harness/replay.py --target <replica>`) at 100 %.
 
 `FitControl` (`domain/ControlAlgorithms.kt`) mirrors `fit.py::make_control` step by step: normalisation (`case`, `keep`,
 `nonascii`), aggregation (`iso_concat` with `alphabet`/`suffix`, `sum_bytes`, `sum_weighted`, `poly` base B), formula

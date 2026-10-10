@@ -27,7 +27,14 @@ class HttpFidelityTest {
         b.method(l.method, body)
         authHeader(l)?.let { b.header("Authorization", it) }
         l.contentType?.let { b.header("Content-Type", it) }
-        return client.send(b.build(), HttpResponse.BodyHandlers.ofString(Charsets.UTF_8))
+        return try {
+            client.send(b.build(), HttpResponse.BodyHandlers.ofString(Charsets.UTF_8))
+        } catch (e: java.io.IOException) {
+            // Keep-alive race: the pooled connection was closed by the server between two requests.
+            // A real client simply reconnects; retry once on a fresh connection and report where it happened.
+            println("[http-fidelity] reconnect at L${l.n} after ${e.message}")
+            TestSupport.newClient().send(b.build(), HttpResponse.BodyHandlers.ofString(Charsets.UTF_8))
+        }
     }
 
     @Test

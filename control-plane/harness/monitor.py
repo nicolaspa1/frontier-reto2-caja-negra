@@ -78,7 +78,7 @@ def is_infra(status, headers, body):
     hl = {k.lower(): v for k, v in (headers or {}).items()}
     if "x-frontier-infra" in hl:
         return True
-    if status in (502, 503, 504):
+    if status in (0, 502, 503, 504):  # 0 = network error recorded by cn.py
         return True
     if body and "Application not found" in body:
         return True

@@ -48,7 +48,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 LOG = os.path.join(ROOT, "experiments", "log.jsonl")
-OUT = os.path.join(ROOT, "spec", "especificacion.md")
+REPO = os.path.dirname(ROOT)  # repository root (spec/ is shared by both planes)
+OUT = os.path.join(REPO, "spec", "especificacion.md")
 
 MAX_CITES_EXPLICIT = 16   # citas máximas cuando las líneas son explícitas
 MAX_CITES_SEARCH = 5      # citas máximas cuando se buscan por matcher

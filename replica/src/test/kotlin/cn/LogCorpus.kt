@@ -10,7 +10,24 @@ data class LogLine(val n: Int, val section: String, val method: String, val path
 object LogCorpus {
     val file: File = File(System.getProperty("log.path") ?: "../experiments/log.jsonl")
 
-    fun lines(): List<LogLine> = file.readLines(Charsets.UTF_8).filter { it.isNotBlank() }.map { raw ->
+    /**
+     * Log lines before which the original was reset by a client that did not write to this log
+     * (another tool sharing the same token). The log itself is never edited; the replay inserts a
+     * synthetic successful POST /__reset so the recorded state matches. Each entry cites the evidence.
+     */
+    private val externalResets: Set<Int> = setOf(
+        1727, // 14:21:40 ALTA;Lucia -> AC-0001 right after an E302 of the same battery: a differential fuzzer reset the service out of band.
+    )
+
+    fun lines(): List<LogLine> = rawLines()
+        .filter { it.status != 0 } // status 0 = network error recorded by the client, nothing to reproduce
+        .flatMap { l ->
+            if (l.n in externalResets)
+                listOf(l.copy(method = "POST", path = "/__reset", bodyBytes = null, contentType = null, status = 200, body = "{\"ok\":true}"), l)
+            else listOf(l)
+        }
+
+    private fun rawLines(): List<LogLine> = file.readLines(Charsets.UTF_8).filter { it.isNotBlank() }.map { raw ->
         val j = JsonObject(raw)
         val req = j.getJsonObject("req"); val res = j.getJsonObject("res")
         LogLine(

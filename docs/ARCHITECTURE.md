@@ -16,9 +16,9 @@ The original service is a black box: an HTTP ledger whose rules are only observa
 | Plane | Where it runs | Role |
 |---|---|---|
 | **Data plane** (`replica/`) | Railway, single instance | Serves the evaluator's traffic. Kotlin + Vert.x, hexagonal. Never calls the original. |
-| **Control plane** (`harness/`) | Operator's machine | Records, replays, monitors and diffs the original; fits unknown algorithms; derives policies and the specification from the log. Never deployed. |
+| **Control plane** (`control-plane/harness/`) | Operator's machine | Records, replays, monitors and diffs the original; fits unknown algorithms; derives policies and the specification from the log. Never deployed. |
 
-The planes share two artefacts only: the policy JSON (`rules/`) that the control plane derives and the data plane loads, and the recorded corpus (`corpus/`) that gates every deploy.
+The planes share two artefacts only: the policy JSON (`rules/`) that the control plane derives and the data plane loads, and the recorded corpus (`control-plane/corpus/`) that gates every deploy.
 
 ## Data plane: hexagonal layout
 
@@ -46,7 +46,7 @@ replica/src/main/kotlin/cn/
 
 ## Control plane: how the evidence is produced
 
-1. **Record** (`record.py`): sends curated cases to the original and stores request and response verbatim in `experiments/log.jsonl`.
+1. **Record** (`record.py`): sends curated cases to the original and stores request and response verbatim in `control-plane/experiments/log.jsonl`.
 2. **Replay** (`replay.py`): runs the corpus against any target and reports step-level diffs; 100 % is the deploy gate.
 3. **Monitor** (`monitor.py`): periodic battery against the original with throttling, request budget, re-confirmation on mismatch, and infrastructure-noise classification. A real drift produces a localized diff, not an alarm.
 4. **Probe catalogue** (`probes.py`, `sondas.json`): discriminating requests per change class (rules, contract, format, commands, state), each with the policy slot it would alter.
@@ -55,7 +55,7 @@ replica/src/main/kotlin/cn/
 
 ## Principles borrowed from Designing Data-Intensive Applications
 
-- **Immutable log as source of truth.** `experiments/log.jsonl` is append-only; policy, corpus, spec and tests are derived views that can always be regenerated.
+- **Immutable log as source of truth.** `control-plane/experiments/log.jsonl` is append-only; policy, corpus, spec and tests are derived views that can always be regenerated.
 - **Derived data, rebuilt not patched.** When the original changes, the policy is re-derived and the spec regenerated; nothing is edited by hand.
 - **Deterministic replay.** The same corpus against the same policy always gives the same answers, which makes diffs meaningful.
 - **Explicit failure modes.** Budgets, throttles, timeouts, infra-vs-logic classification and a single-instance deployment are stated, not assumed.

@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.join(ROOT, "harness"))
 def _head_log_snapshot(tmp_path):
     try:
         out = subprocess.run(
-            ["git", "show", "HEAD:experiments/log.jsonl"],
+            ["git", "show", "HEAD:control-plane/experiments/log.jsonl"],
             cwd=ROOT, capture_output=True, timeout=30,
         )
     except (OSError, subprocess.SubprocessError):

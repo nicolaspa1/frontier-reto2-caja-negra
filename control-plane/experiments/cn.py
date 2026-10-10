@@ -3,8 +3,9 @@
 Usage: python3 cn.py 'PING;64' ['ALTA;Lucia;82' ...]   | python3 cn.py --reset | python3 cn.py --raw METHOD PATH [BODY]
 Each request/response is appended to experiments/log.jsonl with a line number (n) and an optional section (-s "topic")."""
 import json, os, sys, time, urllib.request, urllib.error
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-env = dict(l.strip().split("=",1) for l in open(os.path.join(ROOT,".env")) if "=" in l)
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # control-plane/
+REPO = os.path.dirname(ROOT)  # repository root, where .env lives
+env = dict(l.strip().split("=",1) for l in open(os.path.join(REPO,".env")) if "=" in l)
 URL, TOK = env["CAJA_NEGRA_URL"], env["CAJA_NEGRA_TOKEN"]
 LOG = os.path.join(ROOT,"experiments","log.jsonl")
 def nextn():
@@ -21,6 +22,10 @@ def call(method, path, body=None, headers=None, section="", raw_body=None, token
         r = urllib.request.urlopen(req, timeout=15); status=r.status; rb=r.read().decode(); rh=dict(r.headers)
     except urllib.error.HTTPError as e:
         status=e.code; rb=e.read().decode(); rh=dict(e.headers)
+    except (TimeoutError, OSError, urllib.error.URLError) as e:
+        # Network failure (timeout, reset, DNS): logged as status 0 so the monitor
+        # classifies it as infrastructure noise instead of crashing.
+        status=0; rb=f"<network-error {type(e).__name__}: {str(e)[:80]}>"; rh={}
     ms=int((time.time()-t0)*1000)
     n=nextn()
     logged_body = raw_body if raw_body is not None else body

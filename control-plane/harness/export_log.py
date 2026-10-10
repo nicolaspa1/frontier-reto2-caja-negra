@@ -36,7 +36,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 LOG = os.path.join(ROOT, "experiments", "log.jsonl")
 HIP_MAP = os.path.join(HERE, "hipotesis.json")
-OUT = os.path.join(ROOT, "spec", "experimentos.jsonl")
+REPO = os.path.dirname(ROOT)  # repository root (spec/ and rules/ are shared by both planes)
+OUT = os.path.join(REPO, "spec", "experimentos.jsonl")
 
 # Proposed sentence per known section (editable in harness/hipotesis.json).
 PROPOSALS = {

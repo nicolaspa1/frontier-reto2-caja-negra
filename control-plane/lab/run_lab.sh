@@ -24,7 +24,7 @@ HARNESS="$ROOT/harness"
 POL="$LAB/policies"
 EVID="$LAB/evidence"
 JAR="$LAB/app.jar"
-SRC_JAR="$ROOT/replica/build/libs/app.jar"
+SRC_JAR="$ROOT/../replica/build/libs/app.jar"
 TOKEN="lab"
 PIDS=()
 
