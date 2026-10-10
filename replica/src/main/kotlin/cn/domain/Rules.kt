@@ -84,6 +84,11 @@ object RuleRegistry {
         "DesbloqueoTrasExito" to PostRule { ctx, _ ->
             if (ctx.policy.limits.resetStrikesOnSuccess) ctx.arg("origen")?.let(ctx.ledger::account)?.strikes = 0
         },
+        // A successful DEPOSITO on an account clears its failure counter (and therefore its block). Deposits on
+        // other accounts, CONSULTA, incoming transfers, invalid deposits and ANULA do not (L3663-L3731).
+        "DesbloqueoTrasDeposito" to PostRule { ctx, _ ->
+            ctx.arg("cuenta")?.let(ctx.ledger::account)?.strikes = 0
+        },
     )
 
     fun rule(name: String): Rule = rules[name] ?: error("Unknown rule in policy: $name")

@@ -19,8 +19,19 @@ object LogCorpus {
         1727, // 14:21:40 ALTA;Lucia -> AC-0001 right after an E302 of the same battery: a differential fuzzer reset the service out of band.
     )
 
+    /**
+     * Lines whose request body the client compacted (> 2000 chars) in a way that loses its shape, so the
+     * synthetic reconstruction below cannot reproduce them. Covered instead by explicit tests in RobustnessTest.
+     */
+    private val compactedBodies: Set<Int> = setOf(
+        3382, // 4096-byte truncation of a {"m":"PING;XX","p":"aaa..."} body (invalid JSON) -> E100
+        3740, // 6000-byte valid body with a padding key -> 200 pong
+        3741, // 8192-byte valid body with a padding key -> 200 pong
+    )
+
     fun lines(): List<LogLine> = rawLines()
         .filter { it.status != 0 } // status 0 = network error recorded by the client, nothing to reproduce
+        .filter { it.n !in compactedBodies }
         .flatMap { l ->
             if (l.n in externalResets)
                 listOf(l.copy(method = "POST", path = "/__reset", bodyBytes = null, contentType = null, status = 200, body = "{\"ok\":true}"), l)

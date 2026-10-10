@@ -11,7 +11,7 @@ class ParsedMessage(raw: String, val spec: ParserSpec) {
     val parts: List<String> = this.raw.split(spec.separator)
     private val controlFirst = spec.controlPosition == "first"
     private val hasControl get() = parts.size >= 2
-    val command: String = (parts.getOrNull(if (controlFirst) 1 else 0) ?: "").let { if (spec.commandCase == "sensitive") it else it.uppercase() }
+    val command: String = (parts.getOrNull(if (controlFirst) 1 else 0) ?: "").let { if (spec.commandCase == "sensitive") it else asciiUpper(it) }
     val control: String get() = if (controlFirst) parts.first() else parts.last()
     val args: List<String> get() = when {
         !hasControl -> emptyList()
@@ -159,3 +159,9 @@ object Levenshtein {
         return prev[b.length]
     }
 }
+
+/**
+ * ASCII-only case folding: the original accepts `ping`/`Ping` but NOT `pıng` (dotless i), `PİNG`, `ſalta` or
+ * `Kalta` (Kelvin sign), which a Unicode-aware uppercase would map onto PING/SALTA/KALTA (log L3732-L3739).
+ */
+internal fun asciiUpper(s: String): String = buildString(s.length) { for (c in s) append(if (c in 'a'..'z') c - 32 else c) }

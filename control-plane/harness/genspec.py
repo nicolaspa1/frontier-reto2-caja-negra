@@ -1011,6 +1011,43 @@ FACTS = [
       "(L2272-L2276; vuelve a la normalidad en L2278).",
       [M(status=503, resp_sub='E599')], lines=[2272, 2273, 2274, 2275, 2276]),
 
+    F("Comandos", "CMD-TRANSFER-12",
+      "Desbloqueo por depósito: con AC-0001 bloqueada tras 3 fallos (E507×3 -> "
+      "E510, L3665-L3668), un `DEPOSITO` exitoso a ESA cuenta la desbloquea y "
+      "reinicia el contador: las transferencias siguientes vuelven a 200 "
+      "(L3669-L3671) y hacen falta otros 3 fallos para bloquear de nuevo "
+      "(L3707-L3711). NO desbloquean: depósito a otra cuenta (L3679-L3680), "
+      "CONSULTA (L3688-L3689), transferencia entrante (L3699-L3700), DEPOSITO "
+      "inválido E303 (L3719-L3720) ni ANULA de una operación propia (L3730-L3731).",
+      [M(path='/__reset', status=200), M(req_sub='ALTA;', status=201),
+       M(req_sub='TRANSFER;AC-0001;AC-0002;1;', status=422, resp_sub='E507'),
+       M(req_sub='TRANSFER;AC-0001;AC-0002;1;', status=409, resp_sub='E510'),
+       M(req_sub='TRANSFER;AC-0001;AC-0002;1;', status=200),
+       M(req_sub='DEPOSITO;AC-0001;10;', status=200), M(req_sub='DEPOSITO;AC-0002;10;', status=200),
+       M(req_sub='TRANSFER;AC-0001;AC-0002;50;', status=422, resp_sub='E507'),
+       M(req_sub='TRANSFER;AC-0001;AC-0002;50;', status=409, resp_sub='E510'),
+       M(req_sub='CONSULTA;AC-0001', status=200), M(req_sub='DEPOSITO;AC-0002;100;', status=200),
+       M(req_sub='TRANSFER;AC-0002;AC-0001;5;', status=200), M(req_sub='DEPOSITO;AC-0001;0;', status=400, resp_sub='E303'),
+       M(req_sub='DEPOSITO;AC-0001;5;', status=200), M(req_sub='TRANSFER;AC-0001;AC-0002;100;', status=422, resp_sub='E507'),
+       M(req_sub='TRANSFER;AC-0001;AC-0002;100;', status=409, resp_sub='E510'), M(req_sub='ANULA;OP-0001', status=200)],
+      lines=list(range(3663, 3732))),
+    F("Integridad", "INT-15",
+      "El plegado de mayúsculas del nombre del comando es SÓLO ASCII: `ping` y "
+      "`Ping` equivalen a PING (L3737, L3738) pero `pıng` (i sin punto), `PİNG`, "
+      "`ſalta` y `Kalta` (signo Kelvin) no se reconocen: con control inválido "
+      "dan E201 (L3733-L3736, L3739) y con control válido `pıng;60` da E301 con "
+      "sugerencia PING (L3531). Un uppercase Unicode los plegaría a PING/SALTA/KALTA.",
+      [M(status=400, resp_sub='E201'), M(req_sub='ping;XX', status=200), M(req_sub='Ping;XX', status=200),
+       M(status=400, resp_sub='"sugerencia":"PING"')],
+      lines=[3733, 3734, 3735, 3736, 3737, 3738, 3739, 3530, 3531]),
+    F("Entrada", "IN-18",
+      "Un cuerpo JSON válido grande con claves extra se procesa normalmente: "
+      "`{\"m\":\"PING;XX\",\"p\":\"aaa…\"}` de 6000 y de exactamente 8192 bytes -> 200 "
+      "`{\"pong\":true}` (L3740, L3741); el límite de 8192 es inclusivo. Un cuerpo "
+      "cortado a 4096 bytes en medio de una cadena -> 400 E100 (L3382).",
+      [M(path='/msg', status=200, resp_sub='pong'), M(status=400, resp_sub='E100')],
+      lines=[3740, 3741, 3382]),
+
     F("Riesgos", "RSK-1",
       "ANULA revierte incondicionalmente y puede dejar saldos NEGATIVOS (L130, "
       "L543). Cierre: rechazar la anulación (o encolarla) si el destino no "
@@ -1397,7 +1434,16 @@ def check_sugerencias(rows):
         if '"E301"' not in body:
             continue
         n += 1
-        name = row["req"]["body"]["m"].split(";")[0].upper()
+        rb = row["req"].get("body")
+        if isinstance(rb, str):  # raw bodies are logged as text; parse them when they are JSON
+            try:
+                rb = json.loads(rb)
+            except ValueError:
+                continue
+        if not isinstance(rb, dict) or not isinstance(rb.get("m"), str):
+            continue
+        # The original folds case ASCII-only (INT-13): a Unicode upper() would turn "pıng" into "PING".
+        name = "".join(ch.upper() if "a" <= ch <= "z" else ch for ch in rb["m"].split(";")[0])
         # nearest candidate by distance; tie -> first in list order
         # (rule observed at L1318 and L1623: ALTA beats HALT)
         ds = [(lev(name, c), i, c) for i, c in enumerate(SUGERENCIA_CANDIDATOS)]

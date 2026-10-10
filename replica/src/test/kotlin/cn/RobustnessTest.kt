@@ -160,4 +160,21 @@ class RobustnessTest {
         assertEquals("{\"cuentaId\":\"AC-0001\"}", TestSupport.postMsg(client, base, "ALTA;Lucia;82").text())
         println("Robustness(http): $count requests, no 5xx")
     }
+
+    /** Large but valid bodies with an extra padding key are still parsed: 6000 and exactly 8192 bytes -> 200 pong (L3740, L3741). */
+    @Test
+    fun largeValidBodyWithPaddingKeyIsAccepted() = TestSupport.withServer<Unit> { base ->
+        val client = TestSupport.newClient()
+        for (total in listOf(6000, 8192)) {
+            val head = "{\"m\":\"PING;XX\",\"p\":\""
+            val body = head + "a".repeat(total - head.length - 2) + "\"}"
+            assertEquals(total, body.toByteArray(Charsets.UTF_8).size)
+            val r = TestSupport.send(client, base, "POST", "/msg", body.toByteArray(Charsets.UTF_8))
+            assertEquals(200, r.statusCode(), "bytes=$total"); assertEquals("{\"pong\":true}", r.text())
+        }
+        // A body cut in the middle of a string is invalid JSON -> E100 (L3382).
+        val cut = ("{\"m\":\"PING;XX\",\"p\":\"" + "a".repeat(5000)).take(4096)
+        val r = TestSupport.send(client, base, "POST", "/msg", cut.toByteArray(Charsets.UTF_8))
+        assertEquals(400, r.statusCode()); assertTrue(r.text().contains("E100"), r.text())
+    }
 }

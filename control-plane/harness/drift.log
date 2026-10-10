@@ -486,3 +486,28 @@
 2026-10-10 14:52:04 [battery] OK (27 steps equal)
 2026-10-10 14:52:04 [latency] p50=280.0ms p99=399.5ms max=399.5ms slow>5s=0 5xx=0 infra=0 req=32 steps=31 equal=31 alerts=0
 2026-10-10 14:52:04 [metrics] harness/metrics.jsonl <- steps=31 equal=31 alerts=0
+2026-10-10 15:16:50 === round 1 (short) gasto diario original=1053/8000 (13%); corrida=0 ===
+2026-10-10 15:16:51 [contract] OK (4 H/B checks equal)
+2026-10-10 15:16:58 [battery] OK (27 steps equal)
+2026-10-10 15:16:58 [latency] p50=274.2ms p99=438.7ms max=438.7ms slow>5s=0 5xx=0 infra=0 req=32 steps=31 equal=31 alerts=0
+2026-10-10 15:16:58 [metrics] harness/metrics.jsonl <- steps=31 equal=31 alerts=0
+2026-10-10 15:20:58 === round 2 (short) gasto diario original=1085/8000 (14%); corrida=32 ===
+2026-10-10 15:21:00 [contract] OK (4 H/B checks equal)
+2026-10-10 15:21:07 [battery] OK (27 steps equal)
+2026-10-10 15:21:07 [latency] p50=281.9ms p99=465.9ms max=465.9ms slow>5s=0 5xx=0 infra=0 req=32 steps=31 equal=31 alerts=0
+2026-10-10 15:21:07 [metrics] harness/metrics.jsonl <- steps=31 equal=31 alerts=0
+2026-10-10 15:25:07 === round 3 (short) gasto diario original=1117/8000 (14%); corrida=64 ===
+2026-10-10 15:25:09 [contract] OK (4 H/B checks equal)
+2026-10-10 15:25:16 [battery] OK (27 steps equal)
+2026-10-10 15:25:16 [latency] p50=282.6ms p99=469.4ms max=469.4ms slow>5s=0 5xx=0 infra=0 req=32 steps=31 equal=31 alerts=0
+2026-10-10 15:25:16 [metrics] harness/metrics.jsonl <- steps=31 equal=31 alerts=0
+2026-10-10 15:31:21 === round 1 (short) gasto diario original=1149/8000 (14%); corrida=0 ===
+2026-10-10 15:31:22 [contract] OK (4 H/B checks equal)
+2026-10-10 15:31:30 [battery] OK (27 steps equal)
+2026-10-10 15:31:30 [latency] p50=267.8ms p99=395.5ms max=395.5ms slow>5s=0 5xx=0 infra=0 req=32 steps=31 equal=31 alerts=0
+2026-10-10 15:31:30 [metrics] harness/metrics.jsonl <- steps=31 equal=31 alerts=0
+2026-10-10 15:35:30 === round 2 (short) gasto diario original=1181/8000 (15%); corrida=32 ===
+2026-10-10 15:35:31 [contract] OK (4 H/B checks equal)
+2026-10-10 15:35:39 [battery] OK (27 steps equal)
+2026-10-10 15:35:39 [latency] p50=276.0ms p99=614.1ms max=614.1ms slow>5s=0 5xx=0 infra=0 req=32 steps=31 equal=31 alerts=0
+2026-10-10 15:35:39 [metrics] harness/metrics.jsonl <- steps=31 equal=31 alerts=0
