@@ -719,6 +719,8 @@ def main():
     ap.add_argument("--daily-budget", type=int, default=2000,
                     help="request cap for THIS run")
     ap.add_argument("--build-baseline", action="store_true")
+    ap.add_argument("--corpus", default=None,
+                    help="corpus directory whose battery.jsonl is the baseline (default corpus/; use corpus-v2 after a rule change)")
     ap.add_argument("--noise", type=int, default=0,
                     help="N battery runs at the start to measure the control-vs-control "
                          "noise floor (#3); noisy steps require 3 confirmations")
@@ -729,7 +731,9 @@ def main():
     ap.add_argument("--token", default="lab", help="Bearer token for --target")
     args = ap.parse_args()
 
-    global OG, CMD_BASELINE
+    global OG, CMD_BASELINE, BATTERY_FILE
+    if args.corpus:
+        BATTERY_FILE = os.path.join(args.corpus if os.path.isabs(args.corpus) else os.path.join(ROOT, args.corpus), "battery.jsonl")
     target_label = "ORIGINAL"
     persist_budget = True
     if args.target:
