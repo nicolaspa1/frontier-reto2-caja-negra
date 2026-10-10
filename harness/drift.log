@@ -468,3 +468,8 @@
 2026-10-10 14:34:28 === ronda 7 (corta) gasto diario original=928/8000 (12%); corrida=276 ===
 2026-10-10 14:34:29 [contrato] OK (4 chequeos H/B iguales)
 2026-10-10 14:34:48 [monitor] fin. requests gastados: 293; gasto diario original=945/8000 (12%); corrida=293
+2026-10-10 14:41:28 === round 1 (short) gasto diario original=945/8000 (12%); corrida=0 ===
+2026-10-10 14:41:30 [contract] OK (4 H/B checks equal)
+2026-10-10 14:41:38 [battery] OK (27 steps equal)
+2026-10-10 14:41:38 [latency] p50=280.8ms p99=525.4ms max=525.4ms slow>5s=0 5xx=0 infra=0 req=32 steps=31 equal=31 alerts=0
+2026-10-10 14:41:38 [metrics] harness/metrics.jsonl <- steps=31 equal=31 alerts=0

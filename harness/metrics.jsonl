@@ -22,3 +22,4 @@
 {"ts": "2026-10-10T14:21:46", "target": "ORIGINAL", "pasos": 31, "iguales": 31, "p50": 280.6, "p99": 463.0, "max": 463.0, "n_lentas": 0, "n_5xx": 0, "n_infra": 0, "requests_gastados": 32, "alertas": 0, "presupuesto_restante": 1878}
 {"ts": "2026-10-10T14:25:55", "target": "ORIGINAL", "pasos": 31, "iguales": 31, "p50": 267.9, "p99": 428.4, "max": 428.4, "n_lentas": 0, "n_5xx": 0, "n_infra": 0, "requests_gastados": 32, "alertas": 0, "presupuesto_restante": 1846}
 {"ts": "2026-10-10T14:30:28", "target": "ORIGINAL", "pasos": 117, "iguales": 117, "p50": 275.8, "p99": 453.6, "max": 462.3, "n_lentas": 0, "n_5xx": 0, "n_infra": 0, "requests_gastados": 122, "alertas": 0, "presupuesto_restante": 1724}
+{"ts": "2026-10-10T14:41:38", "target": "ORIGINAL", "pasos": 31, "iguales": 31, "p50": 280.8, "p99": 525.4, "max": 525.4, "n_lentas": 0, "n_5xx": 0, "n_infra": 0, "requests_gastados": 32, "alertas": 0, "presupuesto_restante": 1968}
