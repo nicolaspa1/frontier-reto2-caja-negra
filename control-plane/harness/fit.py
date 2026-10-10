@@ -4,7 +4,7 @@
 Infers OFFLINE (without touching the original service) which control algorithm
 the black box uses today, and produces a serializable `control(payload)`
 function the replacement can load. Today the algorithm is ISO 7064 MOD 97-10
-(see experiments/control.py; crack2.py was the original brute force), but it
+(see experiments/control.py; an earlier one-off brute-force script found it), but it
 COULD CHANGE: this script does not assume the algorithm, it RE-FITS it from
 evidence.
 
@@ -494,20 +494,6 @@ def serialize(p: dict, n_verified: int) -> dict:
     params = {k: v for k, v in p.items() if v is not None}
     return {"familia": familia, "params": params, "verificado_sobre": n_verified,
             "formula_texto": formula_text(p)}
-
-
-def load_fit(path: str = FIT_OUT):
-    """Rebuild control(payload) from control-fit.json (for the replacement)."""
-    with open(path, encoding="utf-8") as fh:
-        spec = json.load(fh)
-    if spec.get("familia") == "permissive":
-        return control_permissive
-    p = dict(spec["params"])
-    p.setdefault("alphabet", None)
-    p.setdefault("suffix", None)
-    p.setdefault("base", None)
-    p.setdefault("case", None)
-    return make_control(p)
 
 
 def control_permissive(payload: str):

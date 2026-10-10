@@ -6,7 +6,7 @@ public Railway replica and a snapshot of `replica/build/libs/app.jar` (built 14:
 ## 1. Method
 
 - **Own generator** (`validation/gen_hidden_like.py`): a simulator written only from the rules in
-  `docs/hechos-caja-negra.md` and `spec/especificacion.md`; no `corpus/` input. 100 cases = 40 singles,
+  `spec/especificacion.md` (and the working notes it was generated from); no `corpus/` input. 100 cases = 40 singles,
   45 of 2–5 steps, 15 of 6–12; 348 steps, 24 raw HTTP.
 - **Evidence**: expected answers looked up in `experiments/log.jsonl` (same request, status and body):
   264 steps cite a line (`L<n>`), 84 are `derived` (state-specific continuations; the only rule-level
@@ -32,8 +32,8 @@ local passes against my independent oracle, zero variance. The public failures a
 Every failing step shows a signature only foreign traffic on the same token can produce: shifted
 `cuentaId`/`operacionId`, E401 on an account created two steps earlier, or balances the case never
 deposited. My runs overlapped the official hidden-set run (13:52, 86/100) and another agent's differential
-fuzzer (14:07–14:16). The "≥2 instances" hypothesis in
-`docs/hechos-caja-negra.md` (14:16) is **not supported**: at 14:24, with no other client, `x-req`
+fuzzer (14:07–14:16). The "≥2 instances" hypothesis
+raised in the working notes at 14:16 is **not supported**: at 14:24, with no other client, `x-req`
 increased strictly 6121→6128 across both `x-hikari-trace` edge nodes and 8/8 `CONSULTA` returned the
 fresh state (the coordinator's 30/30 check agrees). The two traces are Railway edge proxies, not app
 instances. One process, one global ledger: any concurrent client corrupts sequences; the sequential evaluator
@@ -69,7 +69,7 @@ No `derived` expectation failed; without concurrency zero failures remain.
 
 ## 5. Top 5 fixes
 
-1. **Serialize access to the public entrypoint**: one client at a time (lock file + coordinator rule); never fuzz, replay or deploy while a hidden-set run is in flight. Replace the "≥2 instances" root cause in `docs/hechos-caja-negra.md` with the `x-req` evidence.
+1. **Serialize access to the public entrypoint**: one client at a time (lock file + coordinator rule); never fuzz, replay or deploy while a hidden-set run is in flight. Replace the "≥2 instances" root cause with the `x-req` evidence (done: `docs/ARCHITECTURE.md`, "What the day taught us").
 2. **Kill the 10 s tail**: no redeploys in evaluation windows; low `overlapSeconds`; log server-side per-request timing.
 3. **Commit the working tree** (`README.md`, `validation/`, log, `hipotesis.json`) so `test_genspec_check_passes_on_frozen_log` is green; add CI running `pytest tests/` and `gradle test`.
 4. **Fix monitor false alarms** before 15:30: the suggestion probe flags known commands as new; the 13:09 battery alerts had no drift.

@@ -7,7 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** Unit checks: control algorithm, resources in sync with ../rules, hidden commands, canonical control compare. */
+/** Unit checks: control algorithm, resources in sync with ../rules (v1 and v2), hidden commands, canonical control compare. */
 class UnitTest {
     @Test fun iso7064ControlValues() {
         assertEquals(64, Iso7064.control("PING"))
@@ -19,11 +19,16 @@ class UnitTest {
         assertEquals(25, Iso7064.control("ALTA;Juan Perez"))
     }
 
+    /** Both deployed policies are byte-identical to the source of truth in ../rules (skipped only when the repo root is absent, e.g. a standalone replica/ checkout). */
     @Test fun policyResourceMatchesRules() {
-        val rules = File("../rules/policy-v1.json")
-        if (!rules.isFile) return
-        val res = PolicyLoader::class.java.getResourceAsStream("/policy-v1.json")!!.readBytes().toString(Charsets.UTF_8)
-        assertEquals(rules.readText(Charsets.UTF_8), res, "src/main/resources/policy-v1.json is out of sync with ../rules (run gradle syncRules)")
+        val rulesDir = File("../rules")
+        if (!rulesDir.isDirectory) return
+        for (version in listOf("v1", "v2")) {
+            val rules = rulesDir.resolve("policy-$version.json")
+            assertTrue(rules.isFile, "missing ${rules.absolutePath}")
+            val res = PolicyLoader::class.java.getResourceAsStream("/policy-$version.json")!!.readBytes().toString(Charsets.UTF_8)
+            assertEquals(rules.readText(Charsets.UTF_8), res, "src/main/resources/policy-$version.json is out of sync with ../rules (run gradle syncRules)")
+        }
     }
 
     /** HALT/NOTAS follow the order E103>E104>E201>E202>E301>E302 (invalid/malformed control = assumption, no log evidence). */
@@ -62,9 +67,11 @@ class UnitTest {
     }
 
     @Test fun everyRuleNameResolves() {
-        val p = PolicyLoader.load("v1", null)
-        p.integrityOrder.forEach { cn.domain.IntegrityRegistry.rule(it) }
-        p.commands.values.forEach { c -> c.rules.forEach { cn.domain.RuleRegistry.rule(it) }; c.postRules.forEach { cn.domain.RuleRegistry.postRule(it) } }
-        assertTrue(p.errors.keys.containsAll(listOf("E001","E100","E101","E102","E103","E104","E201","E202","E301","E302","E303","E304","E401","E402","E404","E506","E507","E510")))
+        for (version in listOf("v1", "v2")) {
+            val p = PolicyLoader.load(version, null)
+            p.integrityOrder.forEach { cn.domain.IntegrityRegistry.rule(it) }
+            p.commands.values.forEach { c -> c.rules.forEach { cn.domain.RuleRegistry.rule(it) }; c.postRules.forEach { cn.domain.RuleRegistry.postRule(it) } }
+            assertTrue(p.errors.keys.containsAll(listOf("E001","E100","E101","E102","E103","E104","E201","E202","E301","E302","E303","E304","E401","E402","E404","E506","E507","E510")), "policy $version")
+        }
     }
 }

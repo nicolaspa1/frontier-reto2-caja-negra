@@ -12,6 +12,10 @@ control-plane/lab/emu_*.log
 control-plane/lab/emu_*.pid
 control-plane/harness/monitor.out
 control-plane/harness/monitor-baseline.out
+# Monitor outputs (rewritten on every round; the log is the source of truth)
+control-plane/harness/drift.log
+control-plane/harness/metrics.jsonl
+control-plane/harness/budget.json
 .claude/
 
 # Working material kept out of the deliverable repository

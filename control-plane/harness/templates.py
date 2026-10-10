@@ -141,10 +141,6 @@ def pattern_of(values):
     return "texto"
 
 
-def _js(x):
-    return json.dumps([x])
-
-
 def resolve_var_name(path, values, policy_name=None):
     """Return (name, known: bool). Prefers the policy name if the path matches;
     otherwise tries the catalog by value or the path hint."""

@@ -6,21 +6,23 @@
 > are never translated.
 
 Replacement service in Kotlin 2.4 + Vert.x Web 5.1 (lightweight hexagonal architecture). It answers byte for byte
-like the original for everything verified in `../experiments/log.jsonl` (100 % fidelity in tests) and in the corpus
-`../corpus/*.jsonl` (427/427 steps with `control-plane/harness/replay.py`). The rules are data (`../rules/policy-v1.json`); the code
-only knows how to interpret them.
+like the original for everything verified in `../control-plane/experiments/log.jsonl` (6959 lines at the last commit;
+`DomainFidelity` 5153/5153, `HttpFidelity` 6308/6308 in the tests, version 1 and version 2) and in the corpus
+`../control-plane/corpus/*.jsonl` plus the run-2 sequences (720/720 steps with `control-plane/harness/replay.py`). The rules
+are data (`../rules/policy-v1.json`, `../rules/policy-v2.json`); the code only knows how to interpret them, and the same jar
+serves both versions (`POLICY=v1|v2`).
 
 ## Layout and packages
 
 ```
 src/main/kotlin/cn/
-  domain/           pure Kotlin, no Vert.x
+  domain/           pure Kotlin, no Vert.x (known debt: ControlAlgorithms.fit/fromFitJson still take a Vert.x JsonObject)
   adapters/http/    HttpVerticle: exact routing, auth, bounded body reading, 413, never 5xx
   adapters/json/    VertxJsonCodec: envelope {"m": "..."} -> Envelope
   adapters/config/  PolicyLoader: policy-<version>.json -> Policy (+ fail-fast validation)
   app/              Main: environment -> one verticle
-src/main/resources/policy-v1.json   copy of ../rules/policy-v1.json (gradle syncRules refreshes it)
-src/test/kotlin/cn/                 fidelity, unit, parametrisation, robustness and concurrency tests
+src/main/resources/policy-*.json    copies of ../rules/policy-*.json (gradle syncRules refreshes them; the Docker context is replica/ only)
+src/test/kotlin/cn/                 fidelity (v1 + v2), unit, policy v2, parametrisation, robustness and concurrency tests
 ```
 
 | Package | Responsibility |
@@ -47,16 +49,21 @@ curl -s -X POST localhost:8080/msg -H 'Authorization: Bearer ftr_xxx' -d '{"m":"
 gradle test
 ```
 
-- `DomainFidelityTest`: groups `../experiments/log.jsonl` into blocks starting at each `POST /__reset`, replays every
-  `POST /msg` against the pure domain and compares status + normalised JSON (key order ignored). Prints the percentage
-  and the failing lines.
+- `DomainFidelityTest`: groups `../control-plane/experiments/log.jsonl` into blocks starting at each `POST /__reset`,
+  replays every `POST /msg` against the pure domain and compares status + normalised JSON (key order ignored). Blocks from
+  `LogCorpus.V2_FROM` (L5555, incident FR-0153) run against policy v2, earlier ones against v1. Prints the percentage and
+  the failing lines.
 - `HttpFidelityTest`: starts the verticle on a random port and replays all log lines over real HTTP (auth, odd routes,
   methods, 413). 401 lines rotate through token variants (foreign token / no header / lowercase `bearer`) because the log
   does not store the Authorization header. Test token: `ftr_test_token`. A second test covers routing/auth/body-limit edge cases.
-- `UnitTest`: ISO 7064 control values, resources in sync with `../rules`, hidden commands (HALT/NOTAS) following the
-  integrity order, canonical control comparison (`03` -> E202), every rule name resolves.
+- `UnitTest`: ISO 7064 control values, resources in sync with `../rules` (v1 and v2), hidden commands (HALT/NOTAS)
+  following the integrity order, canonical control comparison (`03` -> E202), every rule name resolves in both policies.
+- `PolicyV2Test`: explicit version-2 behaviour independent of the log: 50000 -> 200 and 50001 -> 422 E506; three
+  failures then 423 E510 with `intentos` 1, 2; a deposit lifts the block and the counter restarts; `CONSULTA` renders
+  `"0.22"` and `"-1.00"`; the `decimal()` formatter; and the same code with policy v1 still answers 409 without `intentos`.
 - `ParametrizedPolicyTest`: minimal inline policies exercising the parametrisation (separator `|`, body field `msg`,
-  permissive control, case-sensitive command + trim + control first, `fit` families, route `/mensaje` + scheme `Token `).
+  permissive control, case-sensitive command + trim + control first, `fit` families, route `/mensaje` + scheme `Token `);
+  `fitFromHarnessFile` loads the real `../control-plane/harness/control-fit.json` and fails if it is missing.
 - `RobustnessTest` ("never 5xx"): a seeded generator produces 500 hostile messages (random bytes, 8-20 K characters,
   unicode incl. lone surrogates and control characters, nested separators, numbers around `Long.MAX`, negative, 400-digit,
   non-ASCII digits, control-field edge cases, mutated valid commands) plus raw envelope garbage (deep nesting, invalid
@@ -67,7 +74,7 @@ gradle test
   `ALTA` without reset (ids must be exactly AC-0001..AC-1000, no duplicates); then a deterministic script after a reset
   must match byte for byte. Also checks that every response carries a distinct `x-req`.
 
-The log path is passed with `-Dlog.path` (default `../experiments/log.jsonl`).
+The log path is passed with `-Dlog.path` (`build.gradle.kts` sets it to `../control-plane/experiments/log.jsonl`).
 
 ## Environment variables
 
@@ -75,12 +82,12 @@ The log path is passed with `-Dlog.path` (default `../experiments/log.jsonl`).
 |---|---|---|
 | `PORT` | 8080 | HTTP port (Railway injects it) |
 | `TEAM_TOKEN` | `ftr_PENDIENTE` (placeholder, logs a warning) | Exact token: `Authorization: Bearer <TEAM_TOKEN>` (case-sensitive) |
-| `POLICY` | `v1` | Rules version: `policy-<POLICY>.json` from the classpath, or a path to a file |
+| `POLICY` | `v1` | Rules version: `policy-<POLICY>.json` from the classpath (`v1`, `v2`), or a path to a file |
 | `POLICY_JSON` | — | Inline policy JSON (hot fix without rebuild; wins over `POLICY`) |
 | `HEALTH_INTERNAL` | — | When set, `GET <HEALTH_PATH>` answers 200 without a token (Railway health check) |
 | `HEALTH_PATH` | `/__up-k7f3a9c2` | Internal health-check path; not guessable so `/__up` and everything else keep answering 404 E404 |
 
-## Rules as data (`../rules/policy-v1.json`)
+## Rules as data (`../rules/policy-v1.json`, `../rules/policy-v2.json`)
 
 Every value carries `evidencia: ["Lnn"]` (log lines). Sections: `http` (body limit 8192, auth scheme, routes),
 `integrity` (order E103>E104>E201>E202>E301>E302; `controlFormat` `^[0-9]{1,2}$` — "014", "123", "+5" -> E201; commands
@@ -91,10 +98,15 @@ distance <= 2 of a candidate, a list that includes HALT and NOTAS), `ids`, `limi
 postRules, strikes; includes the hidden commands `HALT` (arity 1, always 409 E520, no effect) and `NOTAS` (arity 0, fixed
 body), both `effect: static`), `responses` and `errors` (exact status + body; `E301_SUGERENCIA`).
 
+`rules/policy-v2.json` is version 2 of the original (incident FR-0153, from L5555): `limits.transferMax.value` 50000,
+`responses.CONSULTA` with `${saldoDecimal}`, `errors.E510` with status 423 and `${intentos}`. Everything else is identical to v1.
+
 How to change a rule:
-1. Edit the value in `rules/policy-v1.json` (e.g. `limits.transferMax.value`) or copy to `policy-v2.json`.
+1. Edit the value in `rules/policy-v<n>.json` (e.g. `limits.transferMax.value`), or derive the next version with
+   `control-plane/harness/adapt.py`; every value keeps its `evidencia`.
 2. `gradle syncRules shadowJar` (or `railway up`): the build copies `../rules/policy-*.json` into resources.
-3. Deploy; to switch versions without a rebuild: `railway variable set POLICY=v2` or `POLICY_JSON='{...}'`.
+3. Deploy with `bash control-plane/harness/release.sh v<n>` (local replay gate, `POLICY=v<n>`, deploy, public replay); to
+   switch versions without a rebuild: `railway variable set POLICY=v2` or `POLICY_JSON='{...}'`.
 
 The per-command pipeline is the list `commands.<CMD>.rules`, resolved by `RuleRegistry` (`Rules.kt`). Latent rules
 implemented but not listed in v1: `LimiteAcumulado` (`limits.accumulatedTransferMax`), `Comision` (`limits.feeFixed` /
@@ -136,7 +148,11 @@ E100/E102), the order route -> auth -> handler, the internal health check (`HEAL
 - Concurrency: one verticle, one event loop; `ConcurrencyTest` verifies serialisation (unique `x-req`), exactly-once id
   allocation and a clean ledger after interleaved resets.
 
-## Handling a change of the control algorithm (15:30 incident)
+## Handling a change of the control algorithm (prepared drill)
+
+This is the runbook prepared before the event for the case where the control-digit algorithm changes. It is **not**
+what incident FR-0153 turned out to be (the real changes were a limit, a response format and an error status; see the root
+README and `docs/ARCHITECTURE.md`); it stays here because the mechanism (`fit` strategy + `POLICY_JSON`) is live and tested.
 
 1. **Detect**: the monitor (`control-plane/harness/monitor.py`) sees E202 where there used to be 200 (or 200 with controls that used to be E202).
 2. **Fit**: `python3 control-plane/harness/fit.py fit` reads the oracle (`control-plane/experiments/log.jsonl`: accepted controls / E202) and writes
@@ -149,7 +165,7 @@ E100/E102), the order route -> auth -> handler, the internal health check (`HEAL
    `"name":"fit"` and send it through `POLICY_JSON` (wins over `POLICY`):
    ```bash
    cd replica
-   POLICY_JSON=$(python3 -c "import json;p=json.load(open('src/main/resources/policy-v1.json'));f=json.load(open('../harness/control-fit.json'));f['name']='fit';p['integrity']['controlAlgorithm']['value']=f;print(json.dumps(p,ensure_ascii=False,separators=(',',':')))")
+   POLICY_JSON=$(python3 -c "import json;p=json.load(open('src/main/resources/policy-v1.json'));f=json.load(open('../control-plane/harness/control-fit.json'));f['name']='fit';p['integrity']['controlAlgorithm']['value']=f;print(json.dumps(p,ensure_ascii=False,separators=(',',':')))")
    railway variable set "POLICY_JSON=$POLICY_JSON" --service frontier-reto2-replica   # restarts the service (~10 s)
    ```
    Alternative with rebuild: copy `control-fit.json` to `rules/`, set `{"name":"fit","file":"/app/control-fit.json"}`

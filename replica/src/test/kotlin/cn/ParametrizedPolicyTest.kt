@@ -16,6 +16,7 @@ import java.net.http.HttpResponse
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** Minimal policies: only what changes; the loader fills in today's defaults for everything else. */
 class ParametrizedPolicyTest {
@@ -72,14 +73,15 @@ class ParametrizedPolicyTest {
         assertEquals(201, h.handle("""{"m":"${Iso7064.control("ALTA;Lucia")};ALTA;Lucia"}""").status)
     }
 
-    /** Real control-fit.json written by `python3 harness/fit.py` (schema of fit.py::serialize). */
+    /** Real control-fit.json written by `python3 control-plane/harness/fit.py fit` (schema of fit.py::serialize). */
     @Test fun fitFromHarnessFile() {
-        val real = listOf(File("../harness/control-fit.json"), File("harness/control-fit.json")).firstOrNull { it.isFile } ?: return
+        val real = File("../control-plane/harness/control-fit.json")
+        assertTrue(real.isFile, "missing ${real.absolutePath}: run `python3 control-plane/harness/fit.py fit` (the test must not be skipped silently)")
         val algo = ControlAlgorithms.from(mapOf("name" to "fit", "file" to real.absolutePath))
         if (JsonObject(real.readText(Charsets.UTF_8)).getString("familia") == "permissive") {
             // fit.py found no candidate (e.g. because its oracle compares the control as an integer and L1070 rejects "03"):
             // in degraded mode there is no value to verify. Warn and check only the permissive semantics.
-            println("WARNING: harness/control-fit.json is in permissive mode; fit.py must treat '03' as a canonical-format rejection, not a value mismatch")
+            println("WARNING: control-plane/harness/control-fit.json is in permissive mode; fit.py must treat '03' as a canonical-format rejection, not a value mismatch")
             assertEquals(null, algo.expected("ALTA;Lucia"))
             return
         }

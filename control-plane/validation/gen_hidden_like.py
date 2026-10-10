@@ -2,7 +2,7 @@
 """Independent hidden-set-shaped generator for Reto 2 (validator's own oracle).
 
 Does NOT read corpus/*.jsonl. Expectations come from a small simulator written
-from the rules documented in docs/hechos-caja-negra.md and spec/especificacion.md.
+from the rules documented in spec/especificacion.md (see also docs/ARCHITECTURE.md).
 For every step the generator then searches experiments/log.jsonl for a line with
 the SAME request and the SAME (status, body); if found the step is tagged with
 that line ("L<n>"), otherwise "derived" (rule-derived, never observed verbatim).
