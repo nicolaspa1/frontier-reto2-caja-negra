@@ -54,6 +54,10 @@ python3 genspec.py --check                                # exit 1 if any citati
 
 `probes.py` accepts local targets only. Tests: `pytest control-plane/tests/` from the repo root (45 tests, no network).
 
+## Automated adaptation cycle
+
+`python3 control-plane/harness/adapt.py run --target <changed-service> --token <t> --base rules/policy-v1.json --out rules/policy-candidate.json --corpus-target-dir <corpus recorded from the target>` replays the base corpus against the changed service, classifies every diff (numeric limit, response format, status change, unknown), localizes each one with surgical probes on a clean state (bisection of limits and of the block threshold, template derivation with `${saldoDecimal}` and `${intentos}`), writes a candidate policy with evidence, and verifies it by replaying the target's corpus against a local jar started with that candidate. Exit code 0 only at 100 %. Validated against today's version 2 (three changes) and four lab mutants. Genuinely new mechanisms are reported as unknown and still need a rule in the registry. `control-plane/harness/release.sh <version>` then deploys with the replay gate.
+
 ## Local lab
 
 `bash control-plane/lab/run_lab.sh` starts local emulators with mutated policies (transfer limit, block threshold, error body, initial balance), runs the battery, probes and corpus replay against each, bisects the mutated limit, adapts a `policy-v2-lab.json`, checks false alarms and infra classification, then kills every process. Zero requests to the original. Evidence files are written under `control-plane/lab/` at run time.

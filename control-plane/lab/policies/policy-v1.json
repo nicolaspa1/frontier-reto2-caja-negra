@@ -19,24 +19,50 @@
       ],
       "nota": "case-sensitive; sin 'Bearer ' o 'bearer' -> E001"
     },
-    "routes": {
-      "value": [
-        {
-          "method": "GET",
-          "path": "/health",
-          "handler": "health"
-        },
-        {
-          "method": "POST",
-          "path": "/__reset",
-          "handler": "reset"
-        },
-        {
-          "method": "POST",
-          "path": "/msg",
-          "handler": "msg"
-        }
+    "authError": {
+      "value": "E001",
+      "evidencia": [
+        "L153",
+        "L156"
+      ]
+    },
+    "unknownRouteError": {
+      "value": "E404",
+      "evidencia": [
+        "L161",
+        "L165"
+      ]
+    },
+    "bodyTooLargeError": {
+      "value": "E101",
+      "evidencia": [
+        "L186"
+      ]
+    },
+    "bodyField": {
+      "value": "m",
+      "evidencia": [
+        "L2",
+        "L168",
+        "L169"
       ],
+      "nota": "campo del envelope JSON; falta o no string -> E102"
+    },
+    "routes": {
+      "value": {
+        "health": {
+          "method": "GET",
+          "path": "/health"
+        },
+        "reset": {
+          "method": "POST",
+          "path": "/__reset"
+        },
+        "msg": {
+          "method": "POST",
+          "path": "/msg"
+        }
+      },
       "evidencia": [
         "L1",
         "L2",
@@ -59,6 +85,36 @@
         "L188",
         "L173"
       ]
+    },
+    "trim": {
+      "value": false,
+      "evidencia": [
+        "L37"
+      ],
+      "nota": "no se recortan espacios: 'ALTA;   ;85' crea cuenta con nombre de espacios"
+    },
+    "commandCase": {
+      "value": "insensitive",
+      "evidencia": [
+        "L12",
+        "L191",
+        "L3732",
+        "L3733",
+        "L3734",
+        "L3735",
+        "L3736",
+        "L3737"
+      ],
+      "nota": "CONSULTa y ping funcionan | plegado SOLO ASCII: pıng (ı sin punto), PİNG, ſalta y Kalta (signo Kelvin) NO se reconocen (E201/E301), ping/Ping sí"
+    },
+    "controlPosition": {
+      "value": "last",
+      "evidencia": [
+        "L2",
+        "L4",
+        "L188"
+      ],
+      "nota": "último segmento; alternativa 'first' (sin evidencia)"
     },
     "order": {
       "value": [
@@ -87,9 +143,19 @@
         "L731",
         "L732",
         "L733",
-        "L18"
+        "L18",
+        "L1065"
       ],
       "nota": "solo 1-2 dígitos ASCII: '+5', '014', '123' -> E201; '00' cumple formato y da E202 por valor"
+    },
+    "controlCompare": {
+      "value": "canonical-string",
+      "evidencia": [
+        "L1070",
+        "L1067",
+        "L730"
+      ],
+      "nota": "tras el formato, el control se compara como TEXTO canónico str(98-(N mod 97)) sin ceros a la izquierda: ALTA;Mateo;3 -> 201 pero ALTA;Mateo;03 -> E202. Alternativa 'numeric' (compara el entero)"
     },
     "suggestion": {
       "value": {
@@ -133,7 +199,16 @@
       "nota": "PING no valida el valor del control pero exige campo (L188) y aridad 0 (L190)"
     },
     "controlAlgorithm": {
-      "value": "ISO7064_MOD97_10",
+      "value": {
+        "name": "iso7064-mod97-10",
+        "alphabet": "a1",
+        "dropNonAlnum": true,
+        "dropNonAscii": true,
+        "caseFold": true,
+        "suffix": "00",
+        "modulus": 97,
+        "base": 98
+      },
       "evidencia": [
         "L2",
         "L4",
@@ -148,7 +223,7 @@
         "L676",
         "L678"
       ],
-      "nota": "letras A..Z=1..26 case-insensitive, dígitos tal cual, resto (';', '-', espacios, no ASCII como é/ñ/emoji) se descarta, +'00', 98-(N mod 97). No ASCII: L668-L678"
+      "nota": "letras A..Z=1..26 case-insensitive, dígitos tal cual, resto (';', '-', espacios, no ASCII como é/ñ/emoji) se descarta, +'00', 98-(N mod 97). No ASCII: L668-L678. Alternativas: {\"name\":\"permissive\"} (nunca E202) y {\"name\":\"fit\",\"file\":\"harness/control-fit.json\"} con {familia: iso7064|suma-bytes|polinomial|luhn, params}"
     }
   },
   "ids": {
@@ -276,7 +351,49 @@
         "L9",
         "L12"
       ]
+    },
+    "transferMaxSameOwnerExempt": {
+      "value": true,
+      "evidencia": [
+        "L2298",
+        "L2299",
+        "L2300",
+        "L2301",
+        "L2302",
+        "L2303",
+        "L2308",
+        "L2317",
+        "L2318",
+        "L2320",
+        "L2221",
+        "L2225",
+        "L2312",
+        "L2315"
+      ],
+      "nota": "TRANSFER entre cuentas cuyo nombre de titular es idéntico (texto exacto, sensible a mayúsculas) no aplica el límite por operación: Lucia->Lucia 100001 -> 200 y saldo destino 100001 (L2301-L2302); X1->Mateo 100001 -> E506 (L2308); Lucia->lucia -> E506 (L2320). E507 y el bloqueo a los 3 fallos siguen aplicando (L2312-L2315)"
     }
+  },
+  "halt": {
+    "value": {
+      "command": "HALT",
+      "confirmValues": [
+        "1"
+      ],
+      "error": "E599"
+    },
+    "evidencia": [
+      "L2272",
+      "L2273",
+      "L2274",
+      "L2275",
+      "L2276",
+      "L2277",
+      "L2278",
+      "L2046",
+      "L1355",
+      "L894"
+    ],
+    "nota": "HALT;1 (argumento \"1\" = confirmación) responde 503 E599 y deja el servicio detenido: todo /msg posterior responde 503 E599 (L2273-L2276) hasta POST /__reset (L2277 -> L2278 vuelve a operar). Otros argumentos (AC-0001, OP-0001, no) -> 409 E520 (L894, L1355, L2046). SUPUESTOS: sólo \"1\" confirma (no se exploran otras formas por seguridad); /health no se ha observado en estado detenido y se mantiene 200"
   },
   "commands": {
     "PING": {
@@ -335,7 +452,9 @@
         "MontoValido",
         "CuentaExiste"
       ],
-      "postRules": [],
+      "postRules": [
+        "DesbloqueoTrasDeposito"
+      ],
       "effect": "deposito",
       "response": "OPERACION",
       "evidencia": [
@@ -343,9 +462,29 @@
         "L49",
         "L50",
         "L52",
-        "L76"
+        "L76",
+        "L3663",
+        "L3664",
+        "L3665",
+        "L3666",
+        "L3667",
+        "L3668",
+        "L3669",
+        "L3670",
+        "L3671",
+        "L3701",
+        "L3702",
+        "L3703",
+        "L3704",
+        "L3705",
+        "L3706",
+        "L3707",
+        "L3708",
+        "L3709",
+        "L3710",
+        "L3711"
       ],
-      "nota": "orden E104 > E303 > E401 (L49: cuenta inexistente + monto 0 -> E303)"
+      "nota": "orden E104 > E303 > E401 (L49: cuenta inexistente + monto 0 -> E303) | un DEPOSITO exitoso a la cuenta bloqueada la desbloquea y reinicia el contador (L3669-L3671, L3707-L3711); depósito a otra cuenta (L3672-L3680), CONSULTA (L3681-L3689), transferencia entrante (L3690-L3700), DEPOSITO inválido (L3712-L3720) y ANULA (L3721-L3731) no desbloquean"
     },
     "TRANSFER": {
       "arity": 3,
@@ -684,6 +823,16 @@
         "L87",
         "L139"
       ]
+    },
+    "E599": {
+      "status": 503,
+      "body": "{\"error\":\"E599\",\"mensaje\":\"service halted\"}",
+      "evidencia": [
+        "L2272",
+        "L2273",
+        "L2276"
+      ],
+      "nota": "servicio detenido tras HALT;1 confirmado; cuerpo copiado byte a byte del log"
     }
   }
 }
