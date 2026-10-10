@@ -18,7 +18,7 @@ The original service is a black box: an HTTP ledger whose rules are only observa
 | **Data plane** (`replica/`) | Railway, single instance | Serves the evaluator's traffic. Kotlin + Vert.x, hexagonal. Never calls the original. |
 | **Control plane** (`control-plane/harness/`) | Operator's machine | Records, replays, monitors and diffs the original; fits unknown algorithms; derives policies and the specification from the log. Never deployed. |
 
-The planes share two artefacts only: the policy JSON (`rules/`) that the control plane derives and the data plane loads, and the recorded corpus (`control-plane/corpus/`) that gates every deploy.
+The planes share two artefacts only: the policy JSON (`rules/`) that the control plane derives and the data plane loads, and the recorded corpus that gates every deploy (`control-plane/corpus/` for version 1, `control-plane/corpus-v2/` for version 2; `release.sh v<n>` picks the matching one).
 
 ## Data plane: hexagonal layout
 
@@ -29,11 +29,13 @@ replica/src/main/kotlin/cn/
     MsgPipeline.kt   the single request pipeline: parse -> integrity -> command rules -> effect -> response
     Rules.kt         rule registry; each rule is a small function selected and parametrized by the policy
     Iso7064.kt / ControlAlgorithms.kt  control-digit algorithms (ISO 7064 MOD 97-10 and alternatives)
+    Model.kt         Response, Envelope, Account (balance, strikes, blockedAttempts), Operation and the inbound ports
     Ledger.kt        in-memory state: accounts, operations, strike counters, id sequences
   adapters/
     http/HttpVerticle.kt     inbound port: routes, auth scheme, body limits, error envelopes, all from the policy
     config/PolicyLoader.kt   outbound port: loads and validates the policy at boot (file or POLICY_JSON)
     json/VertxJsonCodec.kt   serialization with the exact key order and literals the original uses
+  app/Main.kt      reads PORT, TEAM_TOKEN, POLICY / POLICY_JSON, HEALTH_INTERNAL / HEALTH_PATH and deploys one verticle
 ```
 
 - The domain depends on nothing; adapters depend on the domain. Tests exercise the domain directly against the recorded log (`DomainFidelityTest`) and the whole stack over HTTP (`HttpFidelityTest`).
@@ -48,10 +50,11 @@ replica/src/main/kotlin/cn/
 
 1. **Record** (`record.py`): sends curated cases to the original and stores request and response verbatim in `control-plane/experiments/log.jsonl`.
 2. **Replay** (`replay.py`): runs the corpus against any target and reports step-level diffs; 100 % is the deploy gate.
-3. **Monitor** (`monitor.py`): periodic battery against the original with throttling, request budget, re-confirmation on mismatch, and infrastructure-noise classification. A real drift produces a localized diff, not an alarm.
+3. **Monitor** (`monitor.py`): periodic battery against the original (27 steps after `/__reset`, every `--interval` seconds, 180 by default; `--corpus` selects the baseline version) with throttling, request budget, re-confirmation on mismatch, and infrastructure-noise classification. A real drift produces a localized diff, not an alarm.
 4. **Probe catalogue** (`probes.py`, `sondas.json`): discriminating requests per change class (rules, contract, format, commands, state), each with the policy slot it would alter.
 5. **Fit and templates** (`fit.py`, `templates.py`): brute-force search over control-digit algorithms and extraction of response templates, so a changed algorithm or wording is recovered from data instead of guessed.
 6. **Spec generation** (`export_log.py`, `genspec.py`): the specification and the official experiment log are generated from the same log and cross-checked by content, so no claim exists without a request behind it.
+7. **Adapt and release** (`adapt.py`, `release.sh`): `adapt.py` replays the base corpus against a changed service, classifies and localizes every diff with probes and writes a candidate policy with evidence, verified against a local jar; `release.sh v<n>` builds, replays the version's corpus locally (any diff aborts), sets `POLICY` on Railway, deploys and replays again against the public entrypoint. `adapt.py` was finished after the incident (commit 16:48) and validated on version 2 and four lab mutants; policy v2 itself was derived by hand with `templates.py` and the probes.
 
 ## Principles borrowed from Designing Data-Intensive Applications
 
@@ -67,14 +70,14 @@ Single Railway instance (`numReplicas: 1`), Dockerfile build, health check on an
 
 ## What the day taught us
 
-Four hidden rules surfaced after the first evaluation run, none of them guessable from a reasonable corpus: a confirmation value for `HALT` that halts the service until the next reset, an exemption from the transfer limit between accounts of the same holder, a successful deposit that unblocks a blocked account, and ASCII-only case folding of command names. Each one became a policy entry with cited evidence, a small rule function, a regenerated spec entry and a permanent regression case. Two honest refinements to the design:
+Four hidden rules surfaced after the first two evaluation runs (two by differential fuzzing after run 1, two from the run-2 diagnostics), none of them guessable from a reasonable corpus: a confirmation value for `HALT` that halts the service until the next reset, an exemption from the transfer limit between accounts of the same holder, a successful deposit that unblocks a blocked account, and ASCII-only case folding of command names. Each one became a policy entry with cited evidence, a small rule function, a regenerated spec entry and a permanent regression case. Two honest refinements to the design:
 
 - **Values are data; mechanisms are code.** The policy decides which rules apply and with which values. A genuinely new mechanism (a halted state, an exemption) still needs a few lines in the rule registry. The architecture makes that cheap, not free.
 - **Discover by states, not only by values.** Curated and random cases found limits and texts; they missed state transitions. A systematic walk, every command from every known state, is the right first exploration. Equally, the evaluator talks to one shared ledger, so no other client may touch the replacement during a run; that isolation is now an explicit operating rule.
 
 ## Incident FR-0153 as a worked example
 
-At about 15:55 the original switched to version 2 (ticket FR-0153 said 15:30; the monitor round of 15:55:17, L5527–L5554, still matched the v1 baseline and the sweep from L5555 already differed). The full account with citations is `spec/especificacion.md` § "Cambios durante el día", rows `CHG-INC-1..4`.
+Between 15:55:25 and 15:56:39 the original switched to version 2 (ticket FR-0153 said 15:30; the monitor round started at 15:55:17, L5527–L5554, still matched the v1 baseline, and the incident sweep from L5555 already differed). The full account with citations is `spec/especificacion.md` § "Cambios durante el día", rows `CHG-INC-1..4`.
 
 **What changed (three things):**
 
@@ -92,9 +95,9 @@ At about 15:55 the original switched to version 2 (ticket FR-0153 said 15:30; th
 | Decimal balance | `responses.CONSULTA.body` uses `${saldoDecimal}` | `decimal()` formatter in `MsgPipeline.kt` (unit = 1/100, sign, zero padding) and the new template variable |
 | E510 423 + `intentos` | `errors.E510.status: 423`, body template with `${intentos}` | `Account.blockedAttempts` counter in `Model.kt`, incremented in `MsgPipeline.errorVars`, cleared by the unblock post-rules in `Rules.kt` |
 
-Twenty-seven changed lines of Kotlin in total (`git show --stat b28d6fd`); the v1 policy ignores both variables, so the same jar serves v1 and v2 and the fidelity tests replay the log against each version by line number (`LogCorpus.V2_FROM = 5555`). `PolicyV2Test` pins the three behaviours independently of the log.
+Twenty-seven changed lines of Kotlin in `cn/domain` (`Model.kt` 2, `MsgPipeline.kt` 21, `Rules.kt` 4; `git show --stat b28d6fd`); the v1 policy ignores both variables, so the same jar serves v1 and v2 and the fidelity tests replay the log against each version by line number (`LogCorpus.V2_FROM = 5555`). `PolicyV2Test` pins the three behaviours independently of the log.
 
-**Timeline.** 15:55 first v2 responses recorded (L5555); 15:57 monitor alert; policy v2 derived with evidence and verified by local replay of the re-recorded corpus (`control-plane/corpus-v2/`, 109 cases), commit at 16:03; `release.sh v2` deployed at 16:29 behind the replay gate (100 % locally, then 100 % against the public entrypoint); run 3 of the hidden evaluation set at 16:33: 100/100.
+**Timeline.** 15:55:25 last v1 answer (L5554); 15:56:39 first request answered by v2 (L5555); 15:57:24 ten provisional diffs in the battery, 15:57:32 drift alert confirmed after a second reset (`control-plane/harness/drift.log`); policy v2 derived with evidence and verified by local replay of the re-recorded corpus (`control-plane/corpus-v2/`, 109 cases), commit at 16:03; `release.sh v2` deployed at 16:29 behind the replay gate (100 % locally, then 100 % against the public entrypoint); run 3 of the hidden evaluation set at 16:33: 100/100.
 
 **What it confirmed about the design.** The expensive part of a change is not editing the policy but proving the diff: the immutable log, the version-aware corpus and the replay gate turned a behavioural change into a reproducible, cited patch in under forty minutes. The cost the design did not remove is the few lines of code a new mechanism needs; the hexagonal layout kept them inside the domain and out of the HTTP and JSON adapters.
 
