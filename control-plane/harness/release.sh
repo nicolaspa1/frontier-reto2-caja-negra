@@ -33,7 +33,9 @@ kill $JAR_PID 2>/dev/null || true
 echo "== 2/4 deploy (POLICY=$VERSION)"
 (cd "$ROOT/replica" && railway variable set "POLICY=$VERSION" --service "$SERVICE" --skip-deploys)
 # DEPLOY_DIR lets you deploy a prepared copy (for example with local-only patches) instead of replica/.
-(cd "$ROOT/replica" && railway up --detach --service "$SERVICE" ${DEPLOY_DIR:+--path-as-root "$DEPLOY_DIR"})
+UP_ARGS=(--detach --service "$SERVICE")
+[ -n "${DEPLOY_DIR:-}" ] && UP_ARGS+=(--path-as-root "$DEPLOY_DIR")
+(cd "$ROOT/replica" && railway up "${UP_ARGS[@]}")
 
 echo "== 3/4 wait for the deployment"
 for i in $(seq 1 60); do
