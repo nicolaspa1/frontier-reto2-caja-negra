@@ -77,7 +77,7 @@ class MsgPipeline(val policy: Policy, private val codec: JsonCodec) : MessageHan
         for (name in spec.rules) {
             RuleRegistry.rule(name).check(ctx)?.let { code ->
                 strike(ctx, code)
-                return policy.error(code)
+                return policy.error(code, errorVars(ctx, code))
             }
         }
         val (response, op) = apply(ctx)
@@ -94,6 +94,17 @@ class MsgPipeline(val policy: Policy, private val codec: JsonCodec) : MessageHan
             if (best != null) return policy.error("E301_SUGERENCIA", mapOf("sugerencia" to best.first))
         }
         return policy.error(code)
+    }
+
+    /**
+     * Variables available to error templates. E510 carries the number of attempts made while blocked, starting
+     * at 1 and cleared when the block is lifted (v2 `intentos`, L5562+; the v1 template ignores it).
+     */
+    private fun errorVars(ctx: CommandContext, code: String): Map<String, Any> {
+        if (code != "E510") return emptyMap()
+        val acc = ctx.arg("origen")?.let(ledger::account) ?: return emptyMap()
+        acc.blockedAttempts += 1
+        return mapOf("intentos" to acc.blockedAttempts)
     }
 
     /** Blocking failures (E506/E507) as origin add one strike (L84-L87, L136-L139). */
@@ -120,7 +131,7 @@ class MsgPipeline(val policy: Policy, private val codec: JsonCodec) : MessageHan
         }
         "consulta" -> {
             val acc = requireAccount(ctx, "cuenta")
-            policy.response(ctx.spec.response, mapOf("cuentaId" to acc.id, "saldo" to acc.balance)) to null
+            policy.response(ctx.spec.response, mapOf("cuentaId" to acc.id, "saldo" to acc.balance, "saldoDecimal" to decimal(acc.balance))) to null
         }
         "deposito" -> {
             val op = ledger.deposit(requireAccount(ctx, "cuenta"), requireAmount(ctx))
@@ -165,3 +176,9 @@ object Levenshtein {
  * `Kalta` (Kelvin sign), which a Unicode-aware uppercase would map onto PING/SALTA/KALTA (log L3732-L3739).
  */
 internal fun asciiUpper(s: String): String = buildString(s.length) { for (c in s) append(if (c in 'a'..'z') c - 32 else c) }
+
+/** Balance rendered with two decimals, the unit being 1/100 of the stored amount (v2 CONSULTA: 22 -> "0.22", -100 -> "-1.00"; L5562+). */
+internal fun decimal(cents: Long): String {
+    val a = if (cents < 0) -cents else cents
+    return (if (cents < 0) "-" else "") + (a / 100) + "." + (a % 100).toString().padStart(2, '0')
+}

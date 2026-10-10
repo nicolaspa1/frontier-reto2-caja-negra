@@ -103,7 +103,14 @@ BATTERY_BASE = (197, 224)
 #   ("CHG-INC-2", "<since when>: ...", [...], ...)
 #   ("CHG-INC-3", "<how it was detected>: ...", [...], ...)
 #   ("CHG-INC-4", "<how the replacement adapted>: ...", [...], ...)
-INCIDENTE = []
+V2_FROM = 5555  # first log line recorded against version 2 of the original
+
+INCIDENTE = [
+    ("CHG-INC-1", "Qué cambió (1/3): el límite por transferencia bajó de 100000 a 50000, inclusivo: `TRANSFER;AC-0001;AC-0002;50000` -> 200 (L5760, L5821) y 50001 o 100000 -> 422 E506 (L5559, L5560, L5561). Bisección sobre estado limpio en la sección `incidente-bisect`.", ["L5760", "L5821", "L5559", "L5560", "L5561"], "confirmado"),
+    ("CHG-INC-2", "Qué cambió (2/3): `CONSULTA` devuelve el saldo como CADENA con dos decimales, siendo la unidad la centésima del monto almacenado: 22 depósitos de 1 -> `\\\"saldo\\\":\\\"0.22\\\"`, depósito de 1000000 -> `\\\"10000.00\\\"`, saldo negativo tras ANULA -> `\\\"-1.00\\\"` (L5565, L5566, L5580, L5605). En v1 era un entero.", ["L5565", "L5566", "L5580", "L5605"], "confirmado"),
+    ("CHG-INC-3", "Qué cambió (3/3): la cuenta bloqueada responde 423 (antes 409) y el cuerpo añade `intentos`, el número de intentos desde el bloqueo: `{\\\"error\\\":\\\"E510\\\",\\\"mensaje\\\":\\\"cuenta bloqueada\\\",\\\"intentos\\\":1}`, luego 2, 3... (L5562, L5563, L5564, L5660). El contador se reinicia cuando el bloqueo se levanta por depósito.", ["L5562", "L5563", "L5564", "L5660"], "confirmado"),
+    ("CHG-INC-4", "Desde cuándo y cómo se detectó: ticket FR-0153 abierto a las 15:30; la ronda del monitor de las 15:55:17 (L5527-L5554) aún respondía como v1 y el barrido del incidente desde L5555 (15:55) ya como v2; la ronda de las 15:57 del monitor marcó 10 alertas en la batería (L5712, L5717, L5719). Antes, el replay del corpus completo (427 pasos, 15:45) y de los lotes de fuzzing (871 pasos, 15:53) contra el original no mostró diferencias: el cambio real ocurrió hacia las 15:55. Adaptación: `rules/policy-v2.json` con los tres valores y sus citas; el mismo jar la carga con `POLICY=v2`; verificación por replay del corpus regrabado en v2 y por los tests de fidelidad sobre el log partido en v1/v2 (L5555).", ["L5527", "L5554", "L5562", "L5712", "L5717", "L5719"], "confirmado"),
+]
 
 
 def M(**kw):
@@ -1402,6 +1409,8 @@ def battery_runs_equal(rows, byn):
     if len(runs) < 2:
         problems.append("batería: se esperaban al menos 2 re-ejecuciones en el log")
     for start, end in runs:
+        if start >= V2_FROM:  # the original changed to version 2 at L5555; battery runs after that differ by design
+            continue
         for off in range(1, b - a + 1):
             r0, r1 = byn[a + off], byn[start + off]
             if (r0["res"].get("status") != r1["res"].get("status")

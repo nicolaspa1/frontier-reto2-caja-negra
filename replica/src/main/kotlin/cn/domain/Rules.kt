@@ -82,12 +82,12 @@ object RuleRegistry {
     val postRules: Map<String, PostRule> = mapOf(
         // Reset the failure counter after a successful transfer as origin (limits.resetStrikesOnSuccess, L679-L688).
         "DesbloqueoTrasExito" to PostRule { ctx, _ ->
-            if (ctx.policy.limits.resetStrikesOnSuccess) ctx.arg("origen")?.let(ctx.ledger::account)?.strikes = 0
+            if (ctx.policy.limits.resetStrikesOnSuccess) ctx.arg("origen")?.let(ctx.ledger::account)?.let { it.strikes = 0; it.blockedAttempts = 0 }
         },
         // A successful DEPOSITO on an account clears its failure counter (and therefore its block). Deposits on
         // other accounts, CONSULTA, incoming transfers, invalid deposits and ANULA do not (L3663-L3731).
         "DesbloqueoTrasDeposito" to PostRule { ctx, _ ->
-            ctx.arg("cuenta")?.let(ctx.ledger::account)?.strikes = 0
+            ctx.arg("cuenta")?.let(ctx.ledger::account)?.let { it.strikes = 0; it.blockedAttempts = 0 }
         },
     )
 

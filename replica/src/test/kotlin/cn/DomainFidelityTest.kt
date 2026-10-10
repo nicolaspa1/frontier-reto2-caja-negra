@@ -11,7 +11,7 @@ class DomainFidelityTest {
     fun domainReproducesRecordedLog() {
         val failures = mutableListOf<String>(); var total = 0; var byteMismatch = 0
         for (section in LogCorpus.sections()) {
-            val policy = TestSupport.policyV1()
+            val policy = TestSupport.policyFor(section.first().n)
             val h = MsgPipeline(policy, VertxJsonCodec)
             for (l in section) {
                 if (l.path == "/__reset" && l.status == 200) { h.reset(); continue }

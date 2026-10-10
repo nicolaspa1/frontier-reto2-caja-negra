@@ -29,6 +29,9 @@ object LogCorpus {
         3741, // 8192-byte valid body with a padding key -> 200 pong
     )
 
+    /** First log line recorded against version 2 of the original (incident of 15:55; the 15:55:17 monitor round, L5527-L5554, was still v1). */
+    const val V2_FROM = 5555
+
     fun lines(): List<LogLine> = rawLines()
         .filter { it.status != 0 } // status 0 = network error recorded by the client, nothing to reproduce
         .filter { it.n !in compactedBodies }

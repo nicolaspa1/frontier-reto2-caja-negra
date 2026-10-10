@@ -17,6 +17,9 @@ object TestSupport {
     const val TOKEN = "ftr_test_token"
 
     fun policyV1(): Policy = PolicyLoader.load("v1", null)
+    fun policyV2(): Policy = PolicyLoader.load("v2", null)
+    /** The original switched to version 2 between log lines 5554 and 5562 (15:55); lines from [LogCorpus.V2_FROM] replay against policy v2. */
+    fun policyFor(n: Int): Policy = if (n >= LogCorpus.V2_FROM) policyV2() else policyV1()
 
     /** Deploys one HttpVerticle (random port, internal health enabled) and runs [block] against its base URL. */
     fun <T> withServer(policy: Policy = policyV1(), token: String = TOKEN, block: (base: String) -> T): T {

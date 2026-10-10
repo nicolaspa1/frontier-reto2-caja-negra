@@ -34,7 +34,7 @@ fun interface JsonCodec { fun extract(raw: String, field: String): Envelope }
  * Mutable account state. [strikes] counts consecutive blocking failures as transfer origin;
  * [transferredOut] feeds the latent accumulated-transfer limit rule.
  */
-data class Account(val id: String, val name: String, var balance: Long, var strikes: Int = 0, var transferredOut: Long = 0)
+data class Account(val id: String, val name: String, var balance: Long, var strikes: Int = 0, var blockedAttempts: Int = 0, var transferredOut: Long = 0)
 
 /** A recorded deposit or transfer; [annulled] flips once when ANULA reverts it. */
 data class Operation(val id: String, val type: String, val from: String?, val to: String, val amount: Long, val fee: Long, var annulled: Boolean = false)

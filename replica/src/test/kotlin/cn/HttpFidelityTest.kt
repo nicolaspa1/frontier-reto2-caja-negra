@@ -38,16 +38,19 @@ class HttpFidelityTest {
     }
 
     @Test
-    fun httpReproducesRecordedLog() = TestSupport.withServer { base ->
-        val client = TestSupport.newClient()
+    fun httpReproducesRecordedLog() {
         val failures = mutableListOf<String>(); var total = 0
-        for (l in LogCorpus.lines()) {
-            total++
-            val r = send(client, base, l)
-            if (r.statusCode() != l.status || !LogCorpus.jsonEquals(r.body(), l.body)) {
-                failures += "L${l.n} [${l.section}] ${l.method} ${l.path} expected ${l.status} ${l.body} | got ${r.statusCode()} ${r.body()}"
+        // One server per policy version: lines before V2_FROM replay against v1, the rest against v2.
+        for ((v2, lines) in LogCorpus.lines().groupBy { it.n >= LogCorpus.V2_FROM }) TestSupport.withServer(if (v2) TestSupport.policyV2() else TestSupport.policyV1()) { base ->
+            val client = TestSupport.newClient()
+            for (l in lines) {
+                total++
+                val r = send(client, base, l)
+                if (r.statusCode() != l.status || !LogCorpus.jsonEquals(r.body(), l.body)) {
+                    failures += "L${l.n} [${l.section}] ${l.method} ${l.path} expected ${l.status} ${l.body} | got ${r.statusCode()} ${r.body()}"
+                }
+                assertEquals("application/json; charset=utf-8", r.headers().firstValue("content-type").orElse(null), "L${l.n} content-type")
             }
-            assertEquals("application/json; charset=utf-8", r.headers().firstValue("content-type").orElse(null), "L${l.n} content-type")
         }
         println("HttpFidelity: ${total - failures.size}/$total lines equal (${"%.1f".format(100.0 * (total - failures.size) / total)} %)")
         failures.forEach(::println)
