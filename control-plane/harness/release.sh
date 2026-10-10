@@ -11,8 +11,10 @@
 set -euo pipefail
 VERSION="${1:?usage: release.sh <policy-version> [corpus-dir]}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-CORPUS="${2:-$ROOT/control-plane/corpus}"
-[ "$VERSION" = "v1" ] || [ -d "$2" ] 2>/dev/null || CORPUS="$ROOT/control-plane/corpus-$VERSION"
+# Corpus recorded against this version of the original: corpus/ for v1, corpus-<version>/ otherwise, unless given explicitly.
+if [ -n "${2:-}" ]; then CORPUS="$2"
+elif [ "$VERSION" = "v1" ]; then CORPUS="$ROOT/control-plane/corpus"
+else CORPUS="$ROOT/control-plane/corpus-$VERSION"; fi
 SERVICE="frontier-reto2-replica"
 PUBLIC="https://frontier-reto2-replica-production.up.railway.app"
 set -a; source "$ROOT/.env"; set +a
