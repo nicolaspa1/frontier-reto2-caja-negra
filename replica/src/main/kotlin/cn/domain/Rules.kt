@@ -46,8 +46,16 @@ object RuleRegistry {
             val acc = ctx.arg("origen")?.let(ctx.ledger::account) ?: return@Rule null
             if (acc.strikes >= ctx.policy.limits.blockAfterFailures) "E510" else null
         },
-        // Per-operation transfer cap, inclusive. L68-L71
-        "LimitePorOperacion" to Rule { ctx -> if ((ctx.amount ?: 0) > ctx.policy.limits.transferMax) "E506" else null },
+        // Per-operation transfer cap, inclusive (L68-L71). Exempt when origin and destination belong to the same
+        // holder name, compared as exact text (L2301: Lucia->Lucia 100001 OK; L2320: Lucia->lucia E506).
+        "LimitePorOperacion" to Rule { ctx ->
+            if (ctx.policy.limits.transferMaxSameOwnerExempt) {
+                val o = ctx.arg("origen")?.let(ctx.ledger::account)
+                val d = ctx.arg("destino")?.let(ctx.ledger::account)
+                if (o != null && d != null && o.name == d.name) return@Rule null
+            }
+            if ((ctx.amount ?: 0) > ctx.policy.limits.transferMax) "E506" else null
+        },
         // L17, L136
         "SaldoSuficiente" to Rule { ctx ->
             val acc = ctx.arg("origen")?.let(ctx.ledger::account) ?: return@Rule null

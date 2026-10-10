@@ -97,10 +97,12 @@ object PolicyLoader {
                 accumulatedTransferMax = limits.vLongOrNull("accumulatedTransferMax"),
                 feeFixed = limits.vLongOr("feeFixed", 0),
                 feePercent = limits.vLongOr("feePercent", 0),
+                transferMaxSameOwnerExempt = limits.v("transferMaxSameOwnerExempt") as Boolean? ?: false,
             ),
             commands = commands,
             responses = specs("responses"),
             errors = specs("errors"),
+            halt = (j.v("halt") as JsonObject?)?.let { HaltSpec(it.getString("command"), it.getJsonArray("confirmValues").strings().toSet(), it.getString("error")) },
         )
         validate(policy)
         return policy
@@ -117,6 +119,7 @@ object PolicyLoader {
         (requiredErrors + p.http.authError + p.http.unknownRouteError + p.http.bodyTooLargeError).forEach { needError(it, "http/integrity stage") }
         if (p.suggestion != null) needError("E301_SUGERENCIA", "integrity.suggestion is set")
         needResponse("OK", "health/reset")
+        p.halt?.let { h -> needError(h.error, "halt section"); if (h.command !in p.commands) missing += "halt.command ${h.command} is not a command" }
         p.integrityOrder.forEach { if (it !in IntegrityRegistry.rules) missing += "integrity rule $it" }
         for (c in p.commands.values) {
             c.rules.forEach { if (it !in RuleRegistry.rules) missing += "rule $it (command ${c.name})" }

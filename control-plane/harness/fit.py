@@ -414,6 +414,9 @@ def extract_from_log(path: str):
             req = r.get("req", {})
             if req.get("path") != "/msg":
                 continue
+            # status 0 = network error logged by cn.py (timeout/reset): no evidence about the control
+            if r.get("res", {}).get("status") == 0:
+                continue
             b = req.get("body")
             m = b.get("m") if isinstance(b, dict) else b
             if not isinstance(m, str) or ";" not in m:

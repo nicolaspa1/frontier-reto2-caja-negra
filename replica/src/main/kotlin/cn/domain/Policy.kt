@@ -49,9 +49,17 @@ data class Limits(
     val accumulatedTransferMax: Long?,
     val feeFixed: Long,
     val feePercent: Long,
+    /** Transfers between accounts whose holder names are identical (case-sensitive) skip the per-operation cap (L2301-L2303). */
+    val transferMaxSameOwnerExempt: Boolean = false,
 )
 
 data class RouteSpec(val method: String, val path: String)
+
+/**
+ * Confirmed halt (`policy.halt`): when [command] receives one of [confirmValues] as its argument the service enters
+ * a halted state and every message answers [error] until the next reset (L2272-L2278).
+ */
+data class HaltSpec(val command: String, val confirmValues: Set<String>, val error: String)
 
 /** Everything the HTTP adapter reads from the policy: changing a route, method, auth scheme or error code is config only. */
 data class HttpSpec(
@@ -91,6 +99,7 @@ data class Policy(
     val commands: Map<String, CommandSpec>,
     val responses: Map<String, ResponseSpec>,
     val errors: Map<String, ResponseSpec>,
+    val halt: HaltSpec? = null,
 ) {
     /** Renders the error [code]; throws if the policy does not define it (validated at load time by PolicyLoader). */
     fun error(code: String, vars: Map<String, Any> = emptyMap()): Response =

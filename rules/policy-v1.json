@@ -52,8 +52,10 @@
     "resetStrikesOnSuccess": { "value": true, "evidencia": ["L683", "L684", "L685", "L686", "L687", "L688"], "nota": "2 fallos -> éxito -> 2 fallos -> TRANSFER válida 200 (no E510): el contador se reinicia con un éxito como origen (postRule DesbloqueoTrasExito)" },
     "accumulatedTransferMax": { "value": null, "evidencia": ["L693", "L694", "L695", "L696"], "nota": "sin tope acumulado: 3x60000 seguidos -> 200 y destino 180000; regla latente LimiteAcumulado" },
     "feeFixed": { "value": 0, "evidencia": ["L8", "L9", "L12"], "nota": "sin comisión; regla latente Comision" },
-    "feePercent": { "value": 0, "evidencia": ["L8", "L9", "L12"] }
+    "feePercent": { "value": 0, "evidencia": ["L8", "L9", "L12"] },
+    "transferMaxSameOwnerExempt": { "value": true, "evidencia": ["L2298", "L2299", "L2300", "L2301", "L2302", "L2303", "L2308", "L2317", "L2318", "L2320", "L2221", "L2225", "L2312", "L2315"], "nota": "TRANSFER entre cuentas cuyo nombre de titular es idéntico (texto exacto, sensible a mayúsculas) no aplica el límite por operación: Lucia->Lucia 100001 -> 200 y saldo destino 100001 (L2301-L2302); X1->Mateo 100001 -> E506 (L2308); Lucia->lucia -> E506 (L2320). E507 y el bloqueo a los 3 fallos siguen aplicando (L2312-L2315)" }
   },
+  "halt": { "value": { "command": "HALT", "confirmValues": ["1"], "error": "E599" }, "evidencia": ["L2272", "L2273", "L2274", "L2275", "L2276", "L2277", "L2278", "L2046", "L1355", "L894"], "nota": "HALT;1 (argumento \"1\" = confirmación) responde 503 E599 y deja el servicio detenido: todo /msg posterior responde 503 E599 (L2273-L2276) hasta POST /__reset (L2277 -> L2278 vuelve a operar). Otros argumentos (AC-0001, OP-0001, no) -> 409 E520 (L894, L1355, L2046). SUPUESTOS: sólo \"1\" confirma (no se exploran otras formas por seguridad); /health no se ha observado en estado detenido y se mantiene 200" },
   "commands": {
     "PING": { "arity": 0, "args": [], "rules": [], "postRules": [], "effect": "ping", "response": "PING", "evidencia": ["L2", "L187", "L190"] },
     "ALTA": { "arity": 1, "args": ["nombre"], "rules": [], "postRules": [], "effect": "alta", "response": "ALTA", "evidencia": ["L4", "L21", "L31", "L37"] },
@@ -102,6 +104,7 @@
     "E404": { "status": 404, "body": "{\"error\":\"E404\",\"mensaje\":\"ruta desconocida\"}", "evidencia": ["L161", "L162", "L165", "L166"] },
     "E506": { "status": 422, "body": "{\"error\":\"E506\",\"mensaje\":\"límite excedido\"}", "evidencia": ["L10", "L69", "L103"] },
     "E507": { "status": 422, "body": "{\"error\":\"E507\",\"mensaje\":\"saldo insuficiente\"}", "evidencia": ["L17", "L136"] },
-    "E510": { "status": 409, "body": "{\"error\":\"E510\",\"mensaje\":\"cuenta bloqueada\"}", "evidencia": ["L72", "L75", "L87", "L139"] }
+    "E510": { "status": 409, "body": "{\"error\":\"E510\",\"mensaje\":\"cuenta bloqueada\"}", "evidencia": ["L72", "L75", "L87", "L139"] },
+    "E599": { "status": 503, "body": "{\"error\":\"E599\",\"mensaje\":\"service halted\"}", "evidencia": ["L2272", "L2273", "L2276"], "nota": "servicio detenido tras HALT;1 confirmado; cuerpo copiado byte a byte del log" }
   }
 }

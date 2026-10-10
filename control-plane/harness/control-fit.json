@@ -9,6 +9,6 @@
     "formula": "98-",
     "m": 97
   },
-  "verificado_sobre": 282,
+  "verificado_sobre": 368,
   "formula_texto": "norm[case=None, descartar no-alfanuméricos, no-ASCII=drop]; concatenar dígitos (A=1..26) + sufijo '00'; m=97; control = 98 - (N % m)"
 }

@@ -56,6 +56,8 @@ class MsgPipeline(val policy: Policy, private val codec: JsonCodec) : MessageHan
 
     /** Never throws: any unexpected failure degrades to the envelope error (E100) rather than a 5xx. */
     override fun handle(raw: String): Response = try {
+        val halt = policy.halt
+        if (halt != null && ledger.halted) return policy.error(halt.error)
         when (val env = codec.extract(raw, policy.http.bodyField)) {
             Envelope.Invalid -> policy.error("E100")
             Envelope.MissingField -> policy.error("E102")
@@ -104,7 +106,14 @@ class MsgPipeline(val policy: Policy, private val codec: JsonCodec) : MessageHan
     /** Applies the ledger effect named by the command spec. Arguments were validated by the command's rules. */
     private fun apply(ctx: CommandContext): Pair<Response, Operation?> = when (ctx.spec.effect) {
         // Fixed response, ledger untouched: PING, HALT (409 E520, L894), NOTAS (L896)
-        "ping", "static" -> policy.response(ctx.spec.response) to null
+        "ping", "static" -> {
+            // Confirmed HALT (policy.halt): HALT;1 -> 503 E599 and the service stays halted until reset (L2272-L2278).
+            val halt = policy.halt
+            if (halt != null && ctx.spec.name == halt.command && ctx.args.any { it in halt.confirmValues }) {
+                ledger.halted = true
+                policy.error(halt.error) to null
+            } else policy.response(ctx.spec.response) to null
+        }
         "alta" -> {
             val acc = ledger.openAccount(ctx.arg("nombre") ?: "")
             policy.response(ctx.spec.response, mapOf("cuentaId" to acc.id)) to null

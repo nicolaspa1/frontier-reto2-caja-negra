@@ -44,3 +44,6 @@ control-plane/lab/*.jsonl
 control-plane/lab/*.log
 control-plane/validation/results*.json
 control-plane/validation/diffs.jsonl
+# Local-only capture and analysis (never committed)
+control-plane/local/
+control-plane/corpus-fuzz/

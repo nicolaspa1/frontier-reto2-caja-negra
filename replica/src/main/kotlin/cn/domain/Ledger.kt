@@ -9,8 +9,10 @@ class Ledger(private val policy: Policy) {
     val operations = LinkedHashMap<String, Operation>()
     private var accountSeq = 0L
     private var operationSeq = 0L
+    /** Set by a confirmed HALT; every message answers the halt error until [reset] (L2272-L2278). */
+    var halted = false
 
-    fun reset() { accounts.clear(); operations.clear(); accountSeq = 0; operationSeq = 0 }
+    fun reset() { accounts.clear(); operations.clear(); accountSeq = 0; operationSeq = 0; halted = false }
 
     fun account(id: String): Account? = accounts[id]
     fun operation(id: String): Operation? = operations[id]
